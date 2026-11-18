@@ -1,0 +1,107 @@
+{
+  "timestamp": "2026-11-17T18:17:35Z",
+  "llm_mode": "offline",
+  "config": {
+    "students": 30,
+    "attempts_per_student": 40,
+    "seed": 7
+  },
+  "detection": {
+    "planted": 56,
+    "exercised": 45,
+    "detected": 44,
+    "accuracy": 0.786,
+    "accuracy_exercised": 0.978,
+    "root_concept_accuracy": 0.955
+  },
+  "mastery": {
+    "treatment_planted_mastery": 0.5594,
+    "control_planted_mastery": 0.238,
+    "gain_vs_control": 0.3214,
+    "misconceptions_resolved_pct": 0.768,
+    "lessons": 266,
+    "bosses_won": 12
+  },
+  "verifier": {
+    "checked": 73,
+    "passed": 73,
+    "pass_rate": 1.0,
+    "llm_checked": false,
+    "failures": {}
+  },
+  "teach_scorer": {
+    "n": 8,
+    "mae": 9.4,
+    "agreement_within_15": 0.75,
+    "items": [
+      {
+        "concept_id": "stacks",
+        "reference": 100,
+        "predicted": 100,
+        "source": "fallback"
+      },
+      {
+        "concept_id": "stacks",
+        "reference": 10,
+        "predicted": 0,
+        "source": "fallback"
+      },
+      {
+        "concept_id": "queues",
+        "reference": 50,
+        "predicted": 50,
+        "source": "fallback"
+      },
+      {
+        "concept_id": "bst_property",
+        "reference": 100,
+        "predicted": 75,
+        "source": "fallback"
+      },
+      {
+        "concept_id": "bst_property",
+        "reference": 35,
+        "predicted": 50,
+        "source": "fallback"
+      },
+      {
+        "concept_id": "recursion_base",
+        "reference": 75,
+        "predicted": 100,
+        "source": "fallback"
+      },
+      {
+        "concept_id": "hash_tables",
+        "reference": 60,
+        "predicted": 60,
+        "source": "fallback"
+      },
+      {
+        "concept_id": "linked_lists",
+        "reference": 50,
+        "predicted": 50,
+        "source": "fallback"
+      }
+    ]
+  },
+  "latency": {
+    "p50_ms": 6.47,
+    "p95_ms": 16.54,
+    "attempt_p95_ms": 21.4,
+    "llm_p95_ms": 4.0,
+    "requests": 2846
+  },
+  "cost": {
+    "usd_total": 0.0,
+    "usd_per_session": 0.0,
+    "tokens_per_session": 0.0,
+    "llm_calls": 1307,
+    "fallback_rate": 1.0
+  },
+  "sim": {
+    "students": 30,
+    "attempts": 1319,
+    "diagnoses": 478,
+    "duration_s": 38.71
+  }
+}

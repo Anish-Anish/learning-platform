@@ -1,0 +1,17 @@
+[
+  {"id": "w1", "name": "Memory Meadows", "emoji": "🌱", "color": "emerald",
+   "tagline": "Where every name points somewhere.", "concepts": ["memory_basics", "arrays", "linked_lists"]},
+  {"id": "w2", "name": "Recursion Ruins", "emoji": "🌀", "color": "violet",
+   "tagline": "Calls within calls within calls.", "concepts": ["recursion_base", "call_stack"]},
+  {"id": "w3", "name": "Stack & Queue Station", "emoji": "🚉", "color": "sky",
+   "tagline": "Last in, first out... or is it?", "concepts": ["stacks", "queues", "big_o"]},
+  {"id": "w4", "name": "Hash Harbor", "emoji": "⚓", "color": "cyan",
+   "tagline": "Every key finds its bucket.", "concepts": ["hashing", "hash_tables"]},
+  {"id": "w5", "name": "Binary Forest", "emoji": "🌳", "color": "lime",
+   "tagline": "Left is smaller, right is bigger, all the way down.",
+   "concepts": ["tree_basics", "binary_trees", "traversals", "bst_property", "bst_ops", "bst_delete"]},
+  {"id": "w6", "name": "Heap Highlands", "emoji": "⛰️", "color": "amber",
+   "tagline": "The smallest always rises to the top.", "concepts": ["heaps", "priority_queues"]},
+  {"id": "w7", "name": "Graph Galaxy", "emoji": "🪐", "color": "fuchsia",
+   "tagline": "Explore wide, or explore deep.", "concepts": ["graph_basics", "bfs", "dfs"]}
+]
