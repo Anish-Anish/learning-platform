@@ -6,6 +6,7 @@ import type { paths } from "./api-types";
 import { flags } from "./flags";
 import { mockApi } from "./mocks";
 import { readSSE, type SSEHandler } from "./sse";
+import { useSession } from "./store";
 import type {
   AdminMetrics,
   Alerts,
@@ -31,11 +32,29 @@ import type {
   StudentSummary,
   TeachScore,
   Traces,
+  ConceptPatch,
+  EnrollmentList,
+  OkResponse,
+  QuestionPatch,
+  StudentSubjects,
+  StudioConceptContent,
+  StudioGraph,
+  SubjectDetail,
+  SubjectList,
 } from "./types";
 
 export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 const client = createClient<paths>({ baseUrl: API_URL });
+
+// Every request runs against the active subject (backend `X-Subject-Id`, default = built-in course).
+const subjectHeaders = (): Record<string, string> => ({ "X-Subject-Id": useSession.getState().subjectId });
+client.use({
+  onRequest({ request }) {
+    request.headers.set("X-Subject-Id", useSession.getState().subjectId);
+    return request;
+  },
+});
 
 export class ApiError extends Error {
   constructor(
@@ -60,6 +79,28 @@ async function unwrap<T>(p: Promise<{ data?: T; error?: unknown; response: Respo
     throw new ApiError(detail, r.response.status, r.response.headers.get("x-trace-id"));
   }
   return r.data;
+}
+
+async function upload<T>(path: string, form: FormData): Promise<T> {
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}${path}`, { method: "POST", body: form });
+  } catch {
+    throw new ApiError(`Can't reach the Rootwise API at ${API_URL}. Is the backend running?`, 0);
+  }
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const detail = typeof body?.detail === "string" ? body.detail : `Upload failed (${res.status})`;
+    throw new ApiError(detail, res.status, res.headers.get("x-trace-id"));
+  }
+  return body as T;
+}
+
+function filesForm(files: File[], fields: Record<string, string> = {}) {
+  const form = new FormData();
+  for (const [k, v] of Object.entries(fields)) form.append(k, v);
+  for (const f of files) form.append("files", f, f.name);
+  return form;
 }
 
 const real = {
@@ -133,6 +174,51 @@ const real = {
   classGame: (student_id?: string) =>
     unwrap<ClassGame>(client.GET("/class/game", { params: { query: student_id ? { student_id } : {} } })),
 
+  // ---- subjects + teacher studio
+  studentSubjects: (student_id: string) =>
+    unwrap<StudentSubjects>(client.GET("/students/{student_id}/subjects", { params: { path: { student_id } } })),
+  subjects: () => unwrap<SubjectList>(client.GET("/studio/subjects")),
+  subject: (subject_id: string) =>
+    unwrap<SubjectDetail>(client.GET("/studio/subjects/{subject_id}", { params: { path: { subject_id } } })),
+  createSubject: (name: string, description: string, files: File[]) =>
+    upload<SubjectDetail>("/studio/subjects", filesForm(files, { name, description })),
+  addDocuments: (subject_id: string, files: File[]) =>
+    upload<SubjectDetail>(`/studio/subjects/${encodeURIComponent(subject_id)}/documents`, filesForm(files)),
+  regenerate: (subject_id: string) =>
+    unwrap<SubjectDetail>(client.POST("/studio/subjects/{subject_id}/regenerate", { params: { path: { subject_id } } })),
+  publish: (subject_id: string) =>
+    unwrap<SubjectDetail>(client.POST("/studio/subjects/{subject_id}/publish", { params: { path: { subject_id } } })),
+  unpublish: (subject_id: string) =>
+    unwrap<SubjectDetail>(client.POST("/studio/subjects/{subject_id}/unpublish", { params: { path: { subject_id } } })),
+  deleteSubject: (subject_id: string) =>
+    unwrap<OkResponse>(client.DELETE("/studio/subjects/{subject_id}", { params: { path: { subject_id } } })),
+  studioGraph: (subject_id: string) =>
+    unwrap<StudioGraph>(client.GET("/studio/subjects/{subject_id}/graph", { params: { path: { subject_id } } })),
+  studioConcept: (concept_id: string) =>
+    unwrap<StudioConceptContent>(client.GET("/studio/concepts/{concept_id}", { params: { path: { concept_id } } })),
+  patchConcept: (concept_id: string, body: ConceptPatch) =>
+    unwrap<StudioConceptContent>(
+      client.PATCH("/studio/concepts/{concept_id}", { params: { path: { concept_id } }, body }),
+    ),
+  deleteConcept: (concept_id: string) =>
+    unwrap<OkResponse>(client.DELETE("/studio/concepts/{concept_id}", { params: { path: { concept_id } } })),
+  patchQuestion: (question_id: string, body: QuestionPatch) =>
+    unwrap<OkResponse>(client.PATCH("/studio/questions/{question_id}", { params: { path: { question_id } }, body })),
+  deleteQuestion: (question_id: string) =>
+    unwrap<OkResponse>(client.DELETE("/studio/questions/{question_id}", { params: { path: { question_id } } })),
+  createFlashcard: (body: { concept_id: string; front: string; back: string }) =>
+    unwrap<OkResponse>(client.POST("/studio/flashcards", { body })),
+  patchFlashcard: (card_id: string, body: { front: string; back: string }) =>
+    unwrap<OkResponse>(client.PATCH("/studio/flashcards/{card_id}", { params: { path: { card_id } }, body })),
+  deleteFlashcard: (card_id: string) =>
+    unwrap<OkResponse>(client.DELETE("/studio/flashcards/{card_id}", { params: { path: { card_id } } })),
+  enrollment: (subject_id: string) =>
+    unwrap<EnrollmentList>(client.GET("/studio/subjects/{subject_id}/students", { params: { path: { subject_id } } })),
+  setEnrollment: (subject_id: string, student_ids: string[]) =>
+    unwrap<EnrollmentList>(
+      client.PUT("/studio/subjects/{subject_id}/students", { params: { path: { subject_id } }, body: { student_ids } }),
+    ),
+
   // ---- SSE endpoints
   streamLesson: async (
     concept_id: string,
@@ -143,7 +229,10 @@ const real = {
   ) => {
     const q = new URLSearchParams({ student_id });
     if (misconception_id) q.set("misconception_id", misconception_id);
-    const res = await fetch(`${API_URL}/lesson/${encodeURIComponent(concept_id)}?${q}`, { signal });
+    const res = await fetch(`${API_URL}/lesson/${encodeURIComponent(concept_id)}?${q}`, {
+      signal,
+      headers: subjectHeaders(),
+    });
     await readSSE(res, onEvent);
   },
   streamTeach: async (
@@ -154,7 +243,7 @@ const real = {
   ) => {
     const res = await fetch(`${API_URL}/teach/${encodeURIComponent(concept_id)}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...subjectHeaders() },
       body: JSON.stringify(body),
       signal,
     });

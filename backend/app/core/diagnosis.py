@@ -10,7 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.ai.diagnosis_agent import AttemptFact, ConceptFact, DiagnosisContext, diagnose
-from app.core.graph import ContentGraph, get_graph
+from app.core.graph import ContentGraph, get_graph, subject_of_concept
 from app.core.learner_model import mastery
 from app.core.student_state import load_attempts, load_rows, recompute
 from app.db import models as m
@@ -168,7 +168,7 @@ def apply_proposal(db: Session, dx: m.Diagnosis, p: DiagnosisProposal, source: s
 
 
 def execute(db: Session, dx: m.Diagnosis, trace_id: str) -> m.Diagnosis:
-    graph = get_graph(db)
+    graph = get_graph(db, subject_of_concept(db, dx.failed_concept_id))
     try:
         ctx = build_context(db, dx, graph)
         proposal, source = diagnose(ctx, graph, trace_id)

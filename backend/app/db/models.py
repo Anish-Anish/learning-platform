@@ -26,10 +26,70 @@ class Base(DeclarativeBase):
     pass
 
 
+# ------------------------------------------------------------------ subjects (5A)
+class Subject(Base):
+    """A learnable subject. The original seed is the default subject; studio uploads create the rest."""
+
+    __tablename__ = "subjects"
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    name: Mapped[str] = mapped_column(String)
+    description: Mapped[str] = mapped_column(Text, default="")
+    owner_id: Mapped[str] = mapped_column(String, default="teacher")
+    # draft -> processing -> review -> published  (failed on pipeline error)
+    status: Mapped[str] = mapped_column(String, default="draft")
+    is_default: Mapped[bool] = mapped_column(Boolean, default=False)
+    worlds: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    diagnostic_concepts: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    content_version: Mapped[int] = mapped_column(Integer, default=1)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    published_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class Enrollment(Base):
+    __tablename__ = "enrollments"
+    student_id: Mapped[str] = mapped_column(ForeignKey("students.id"), primary_key=True)
+    subject_id: Mapped[str] = mapped_column(ForeignKey("subjects.id"), primary_key=True)
+    assigned_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class StudioJob(Base):
+    """One run of the ingestion pipeline for a subject (progress is polled by the studio UI)."""
+
+    __tablename__ = "studio_jobs"
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: new_id("job"))
+    subject_id: Mapped[str] = mapped_column(ForeignKey("subjects.id"), index=True)
+    trace_id: Mapped[str] = mapped_column(String)
+    status: Mapped[str] = mapped_column(String, default="queued")  # queued / running / done / failed
+    stage: Mapped[str] = mapped_column(String, default="queued")
+    progress: Mapped[float] = mapped_column(Float, default=0.0)
+    message: Mapped[str] = mapped_column(Text, default="")
+    stats: Mapped[dict] = mapped_column(JSON, default=dict)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class Flashcard(Base):
+    __tablename__ = "flashcards"
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: new_id("fc"))
+    subject_id: Mapped[str] = mapped_column(ForeignKey("subjects.id"), index=True)
+    concept_id: Mapped[str] = mapped_column(ForeignKey("concepts.id"), index=True)
+    position: Mapped[int] = mapped_column(Integer, default=0)
+    front: Mapped[str] = mapped_column(Text)
+    back: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String, default="draft")
+    source: Mapped[str] = mapped_column(String, default="generated")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
 # ------------------------------------------------------------------ content
 class Concept(Base):
     __tablename__ = "concepts"
     id: Mapped[str] = mapped_column(String, primary_key=True)
+    subject_id: Mapped[str] = mapped_column(String, index=True, default="data_structures",
+                                            server_default="data_structures")
+    position: Mapped[int] = mapped_column(Integer, default=0, server_default="0")  # order in the source material
     name: Mapped[str] = mapped_column(String)
     description: Mapped[str] = mapped_column(Text)
     notes_md: Mapped[str] = mapped_column(Text, default="")
@@ -309,12 +369,19 @@ class Feedback(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
-# ------------------------------------------------------------------ 5A hooks (unused in 5B)
+# ------------------------------------------------------------------ 5A source material
 class SourceDocument(Base):
     __tablename__ = "source_documents"
     id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: new_id("doc"))
     owner_id: Mapped[str] = mapped_column(String)
+    subject_id: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
     filename: Mapped[str] = mapped_column(String)
+    storage_path: Mapped[str | None] = mapped_column(String, nullable=True)
+    size_bytes: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    page_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    parse_stats: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     parsed_text: Mapped[str] = mapped_column(Text, default="")
+    # uploaded -> parsed | failed
     status: Mapped[str] = mapped_column(String, default="uploaded")
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)

@@ -90,7 +90,7 @@ def select_next(db: Session, student_id: str, graph: ContentGraph) -> Pick:
     attempts = load_attempts(db, student_id)
     rows = load_rows(db, student_id, graph)
     results = recompute(rows, attempts, graph)
-    regular = [a for a in attempts if a.boss_battle_id is None]
+    regular = [a for a in attempts if a.boss_battle_id is None and a.concept_id in graph.concepts]
     recent_qids = {a.question_id for a in attempts[-s.recent_window :]}
     attempted_concepts = {a.concept_id for a in attempts}
 
@@ -109,7 +109,7 @@ def select_next(db: Session, student_id: str, graph: ContentGraph) -> Pick:
         return out
 
     # 1. Diagnostic phase -----------------------------------------------------------------
-    diag = [c for c in s.diagnostic_concept_ids if c in graph.concepts]
+    diag = list(graph.diagnostic_concepts)
     n_diag = min(len(regular), len(diag))
     if len(regular) < len(diag):
         for cid in diag:

@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils";
 
 import { Logo } from "./logo";
 import { StudentSwitcher } from "./student-switcher";
+import { SubjectSwitcher } from "./subject-switcher";
 import { ThemeToggle } from "./theme-toggle";
 
 type Variant = "student" | "teacher" | "admin";
@@ -27,6 +28,7 @@ const NAV: Record<Variant, { href: string; label: string }[]> = {
   ],
   teacher: [
     { href: "/dashboard", label: "Class dashboard" },
+    { href: "/studio", label: "📚 Studio" },
     { href: "/arena", label: "🎮 Game results" },
     { href: "/admin", label: "Admin" },
   ],
@@ -43,7 +45,9 @@ export function AppShell({ variant, children }: { variant: Variant; children: Re
   const storeReady = useHydrated();
   const studentId = useSession((s) => s.studentId);
   const student = useEnsureStudent(studentId, variant === "student" && storeReady);
-  const hydrated = variant !== "student" || (storeReady && student.ready);
+  // Wait for the persisted store everywhere: requests carry the stored subject id.
+  const hydrated = storeReady && (variant !== "student" || student.ready);
+  const showSubjects = hydrated && (variant === "student" || (variant === "teacher" && !path.startsWith("/studio")));
   return (
     <div data-accent={variant === "student" ? "violet" : "teal"} className="flex min-h-screen flex-col">
       <header className="sticky top-0 z-40 border-b bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -67,6 +71,7 @@ export function AppShell({ variant, children }: { variant: Variant; children: Re
             ))}
           </nav>
           <div className="ml-auto flex items-center gap-1.5">
+            {showSubjects && <SubjectSwitcher variant={variant === "student" ? "student" : "teacher"} />}
             {variant === "student" && hydrated && (
               <>
                 <StudentSwitcher />

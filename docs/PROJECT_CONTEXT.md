@@ -424,6 +424,23 @@ All responses include `trace_id`. Streaming endpoints use SSE.
 | GET | `/admin/traces?limit=` | Recent `llm_calls` |
 | POST | `/sim/run` | Run simulator (dev only, flag-gated) |
 
+**Subjects (5A, additive).** Every student/class endpoint above runs against the subject in the
+`X-Subject-Id` request header (default `data_structures`, the built-in seed). Non-default subjects must be
+published, else 404. Class analytics only count students enrolled in that subject.
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/students/{id}/subjects` | Subjects the student can learn (default + published enrolled ones) |
+| GET / POST | `/studio/subjects` | List subjects / create one from uploaded files (multipart `name`, `description`, `files[]`) → starts a generation job |
+| GET / DELETE | `/studio/subjects/{id}` | Detail (job progress, documents, worlds, publish blockers) / delete (only if never practised) |
+| POST | `/studio/subjects/{id}/documents` | Add files to a draft and regenerate |
+| POST | `/studio/subjects/{id}/regenerate` · `/publish` · `/unpublish` | Job + review lifecycle |
+| GET | `/studio/subjects/{id}/graph` | Concepts with prerequisites, depth, counts |
+| GET / PUT | `/studio/subjects/{id}/students` | Enrollment list / replace assigned student ids |
+| GET / PATCH / DELETE | `/studio/concepts/{id}` | Concept + questions + flashcards / edit (DAG-checked) / delete (dependents rewired) |
+| PATCH / DELETE | `/studio/questions/{id}` | Edit wording (deterministic verifier re-run) / delete |
+| POST / PATCH / DELETE | `/studio/flashcards[/{id}]` | Teacher-authored or edited flashcards |
+
 ---
 
 ## 12. Frontend specification (P3)

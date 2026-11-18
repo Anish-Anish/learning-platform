@@ -59,7 +59,7 @@ class LevelLocked(LevelError):
 
 @lru_cache
 def worlds() -> list[dict]:
-    return json.loads((SEED_DIR / "worlds.json").read_text())
+    return json.loads((SEED_DIR / "worlds.json").read_text(encoding="utf-8"))
 
 
 def world_of(concept_id: str) -> dict | None:
@@ -145,7 +145,7 @@ def world_map(db: Session, student_id: str, graph: ContentGraph, trace_id: str) 
     n_plays = plays(db, student_id)
     out_worlds: list[WorldInfo] = []
     seen: set[str] = set()
-    for w in [*worlds(), {"id": "bonus", "name": "Bonus Isles", "emoji": "🏝️", "color": "rose",
+    for w in [*graph.worlds, {"id": "bonus", "name": "Bonus Isles", "emoji": "🏝️", "color": "rose",
                           "tagline": "Extra challenges.", "concepts": [c for c in graph.concepts]}]:
         levels = []
         for cid in w["concepts"]:
@@ -337,7 +337,8 @@ def profile(db: Session, student: m.Student, graph: ContentGraph, trace_id: str)
 # ------------------------------------------------------------------ teacher: class game results
 def class_game(db: Session, graph: ContentGraph, trace_id: str, student_id: str | None = None) -> ClassGameResponse:
     students = {s.id: s for s in db.scalars(select(m.Student))}
-    q = select(m.LevelRun).where(m.LevelRun.status.in_(["completed", "failed"]))
+    q = select(m.LevelRun).where(m.LevelRun.status.in_(["completed", "failed"]),
+                                 m.LevelRun.concept_id.in_(list(graph.concepts)))
     if student_id:
         q = q.where(m.LevelRun.student_id == student_id)
     runs = db.scalars(q.order_by(m.LevelRun.finished_at.desc())).all()
@@ -370,7 +371,7 @@ def class_game(db: Session, graph: ContentGraph, trace_id: str, student_id: str 
     att_mis = {a.id: a.selected_misconception_id for a in db.scalars(
         select(m.Attempt).where(m.Attempt.selected_misconception_id.is_not(None)))}
     levels = []
-    for w in worlds():
+    for w in graph.worlds:
         for cid in w["concepts"]:
             if cid not in graph.concepts:
                 continue

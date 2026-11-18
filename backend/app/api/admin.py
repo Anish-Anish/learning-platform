@@ -37,7 +37,7 @@ def latest_eval() -> dict | None:
     if not files:
         return None
     try:
-        return json.loads(files[-1].read_text())
+        return json.loads(files[-1].read_text(encoding="utf-8"))
     except Exception:
         return None
 

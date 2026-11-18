@@ -13,7 +13,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.ai.verifier import deterministic_check
-from app.config import SEED_DIR
+from app.config import DEFAULT_SUBJECT_ID, SEED_DIR
 from app.core import graph as graph_mod
 from app.db import models as m
 from app.db.session import SessionLocal, create_all, get_engine
@@ -28,13 +28,22 @@ class SeedError(ValueError):
 
 
 def load_seed_files() -> tuple[list[SeedConcept], list[SeedMisconception], list[SeedQuestion], dict[str, str]]:
-    concepts = [SeedConcept.model_validate(c) for c in json.loads((SEED_DIR / "concepts.json").read_text())]
-    mis = [SeedMisconception.model_validate(x) for x in json.loads((SEED_DIR / "misconceptions.json").read_text())]
-    questions = [SeedQuestion.model_validate(q) for q in json.loads((SEED_DIR / "questions.json").read_text())]
+    concepts = [
+        SeedConcept.model_validate(c)
+        for c in json.loads((SEED_DIR / "concepts.json").read_text(encoding="utf-8"))
+    ]
+    mis = [
+        SeedMisconception.model_validate(x)
+        for x in json.loads((SEED_DIR / "misconceptions.json").read_text(encoding="utf-8"))
+    ]
+    questions = [
+        SeedQuestion.model_validate(q)
+        for q in json.loads((SEED_DIR / "questions.json").read_text(encoding="utf-8"))
+    ]
     notes = {}
     for c in concepts:
         p = SEED_DIR / "notes" / f"{c.id}.md"
-        notes[c.id] = p.read_text() if p.exists() else ""
+        notes[c.id] = p.read_text(encoding="utf-8") if p.exists() else ""
     return concepts, mis, questions, notes
 
 
@@ -77,20 +86,28 @@ def seed(db: Session, reset: bool = False) -> dict[str, int]:
     if issues:
         raise SeedError(f"verifier rejected seed questions: {issues}")
 
+    ensure_default_subject(db)
+    seed_ids = [c.id for c in concepts]
     if reset:
-        for model in (m.Option, m.Question, m.Misconception, m.Prerequisite, m.Concept):
-            db.execute(delete(model))
+        default_ids = select(m.Concept.id).where(m.Concept.subject_id == DEFAULT_SUBJECT_ID)
+        q_ids = select(m.Question.id).where(m.Question.concept_id.in_(default_ids))
+        db.execute(delete(m.Option).where(m.Option.question_id.in_(q_ids)))
+        db.execute(delete(m.Question).where(m.Question.concept_id.in_(default_ids)))
+        db.execute(delete(m.Misconception).where(m.Misconception.concept_id.in_(default_ids)))
+        db.execute(delete(m.Prerequisite).where(m.Prerequisite.concept_id.in_(default_ids)))
+        db.execute(delete(m.Concept).where(m.Concept.subject_id == DEFAULT_SUBJECT_ID))
         db.flush()
 
     for c in concepts:
         row = db.get(m.Concept, c.id) or m.Concept(id=c.id)
+        row.subject_id = DEFAULT_SUBJECT_ID
         row.name, row.description = c.name, c.description
         row.notes_md = notes[c.id]
         row.key_points, row.bloom_levels = c.key_points, list(c.bloom_levels)
         row.status = "approved"
         db.merge(row)
     db.flush()
-    db.execute(delete(m.Prerequisite))
+    db.execute(delete(m.Prerequisite).where(m.Prerequisite.concept_id.in_(seed_ids)))
     for c in concepts:
         for p in c.prerequisites:
             db.add(m.Prerequisite(concept_id=c.id, prerequisite_id=p))
@@ -145,11 +162,24 @@ def seed(db: Session, reset: bool = False) -> dict[str, int]:
     return counts
 
 
+def ensure_default_subject(db: Session) -> m.Subject:
+    s = db.get(m.Subject, DEFAULT_SUBJECT_ID)
+    if s is None:
+        s = m.Subject(id=DEFAULT_SUBJECT_ID, name="Data Structures",
+                      description="Arrays to graphs: the built-in Rootwise course.", status="published",
+                      is_default=True, published_at=m.utcnow())
+        db.add(s)
+        db.flush()
+    return s
+
+
 def ensure_seeded(db: Session) -> bool:
     """Seed on first start. Returns True if seeding happened."""
-    if db.scalars(select(m.Concept).limit(1)).first() is None:
+    if db.scalars(select(m.Concept).where(m.Concept.subject_id == DEFAULT_SUBJECT_ID).limit(1)).first() is None:
         seed(db)
         return True
+    ensure_default_subject(db)
+    db.commit()
     return False
 
 

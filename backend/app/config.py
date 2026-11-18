@@ -11,6 +11,8 @@ BACKEND_DIR = Path(__file__).resolve().parent.parent
 SEED_DIR = BACKEND_DIR / "seed"
 PROMPTS_DIR = BACKEND_DIR / "prompts"
 EVAL_RESULTS_DIR = BACKEND_DIR / "app" / "evals" / "results"
+UPLOADS_DIR = BACKEND_DIR / "uploads"
+DEFAULT_SUBJECT_ID = "data_structures"
 
 
 class Settings(BaseSettings):
@@ -75,7 +77,23 @@ class Settings(BaseSettings):
     tracing_export: str = ""  # "", "langfuse", "phoenix"
     log_level: str = "INFO"
 
+    # --- teacher studio (5A): uploads -> subject graph, quizzes, flashcards ---
+    studio_max_upload_mb: int = 200
+    studio_max_files: int = 10
+    studio_max_pages: int = 2000
+    studio_chunk_chars: int = 24_000
+    studio_max_chunks: int = 120
+    studio_max_vision_images: int = 40
+    studio_max_ocr_pages: int = 30
+    studio_min_image_px: int = 140
+    studio_max_concepts: int = 24
+    studio_questions_per_concept: int = 4
+    studio_flashcards_per_concept: int = 6
+    studio_workers: int = 6
+    studio_llm_timeout_s: float = 90.0
+
     # --- flags (rule 9) ---
+    flag_studio: bool = True
     flag_sim_endpoint: bool = True
     flag_boss: bool = True
     flag_teach_bot: bool = True

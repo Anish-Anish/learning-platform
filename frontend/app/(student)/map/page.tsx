@@ -15,12 +15,14 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { Skeleton } from "@/components/ui/skeleton";
 import { flags } from "@/lib/flags";
 import { useConcepts, useStudentMap } from "@/lib/queries/student";
+import { useActiveSubjectName } from "@/lib/queries/studio";
 import { STATE_META } from "@/lib/states";
 import { useSession } from "@/lib/store";
 import type { MapNode } from "@/lib/types";
 
 export default function MapPage() {
   const studentId = useSession((s) => s.studentId);
+  const subjectName = useActiveSubjectName();
   const map = useStudentMap(studentId);
   const concepts = useConcepts();
   const [selected, setSelected] = useState<MapNode | null>(null);
@@ -75,7 +77,7 @@ export default function MapPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Knowledge map</h1>
           <p className="text-sm text-muted-foreground">
-            Data Structures skill tree. Concepts unlock when every prerequisite reaches 70% mastery.
+            {subjectName} skill tree. Concepts unlock when every prerequisite reaches 70% mastery.
           </p>
         </div>
         <div className="w-56 space-y-1">

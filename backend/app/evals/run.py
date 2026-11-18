@@ -180,10 +180,10 @@ def main() -> None:
     args = ap.parse_args()
     EVAL_RESULTS_DIR.mkdir(parents=True, exist_ok=True)
     prev_files = sorted(EVAL_RESULTS_DIR.glob("*.json"))
-    prev = json.loads(prev_files[-1].read_text()) if prev_files else None
+    prev = json.loads(prev_files[-1].read_text(encoding="utf-8")) if prev_files else None
     res = run(args.students, args.attempts, args.seed)
     path = EVAL_RESULTS_DIR / f"{res['timestamp'].replace(':', '')}.json"
-    path.write_text(json.dumps(res, indent=2))
+    path.write_text(json.dumps(res, indent=2), encoding="utf-8")
     print(f"\nRootwise eval ({res['llm_mode']} mode, {args.students} simulated students)")
     print("\n".join(compare(res, prev)))
     print(f"\nSaved {path}")

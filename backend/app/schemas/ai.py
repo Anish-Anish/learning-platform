@@ -6,6 +6,8 @@ Note: the diagnosis schema used for the actual LLM call is built dynamically in
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 
@@ -88,3 +90,67 @@ class TeachScore(BaseModel):
 
 class HintContent(BaseModel):
     hint: str
+
+
+# ------------------------------------------------------------------ teacher studio (5A)
+class FigureInsight(BaseModel):
+    kind: Literal["diagram", "chart", "table", "photo", "equation", "code", "decorative"]
+    description: str = Field(description="What the figure teaches, 1-4 sentences; empty if decorative")
+    extracted_text: str = Field(description="Labels / numbers / table cells visible in the figure, or empty")
+
+
+class PageTranscript(BaseModel):
+    markdown: str = Field(description="Faithful transcription of the scanned page as Markdown")
+
+
+class CandidateConcept(BaseModel):
+    name: str
+    summary: str
+    key_points: list[str]
+    prerequisite_names: list[str]
+
+
+class ChunkConcepts(BaseModel):
+    concepts: list[CandidateConcept]
+
+
+class ProposedConcept(BaseModel):
+    key: str = Field(description="short snake_case id, unique")
+    name: str
+    description: str
+    prerequisites: list[str] = Field(description="keys of concepts that must be learned first")
+    source_chunks: list[int] = Field(description="indices of the chunks that teach this concept")
+
+
+class ProposedUnit(BaseModel):
+    name: str
+    tagline: str
+    emoji: str
+    concept_keys: list[str]
+
+
+class SubjectGraphProposal(BaseModel):
+    concepts: list[ProposedConcept]
+    units: list[ProposedUnit]
+
+
+class ProposedMisconception(BaseModel):
+    description: str = Field(description="the wrong belief, phrased as the student would hold it")
+    correct_belief: str
+    analogy: str
+    socratic: list[str]
+
+
+class ConceptNotesOut(BaseModel):
+    notes_md: str = Field(description="150-400 words of teacher-style notes grounded only in the source")
+    key_points: list[str]
+    misconceptions: list[ProposedMisconception]
+
+
+class GeneratedFlashcard(BaseModel):
+    front: str
+    back: str
+
+
+class FlashcardSet(BaseModel):
+    cards: list[GeneratedFlashcard]

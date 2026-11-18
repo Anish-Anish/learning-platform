@@ -11,6 +11,8 @@ its deterministic fallback and is still logged, so the demo never shows an error
 
 from __future__ import annotations
 
+import base64
+import hashlib
 import json
 import time
 from collections.abc import Callable
@@ -24,7 +26,7 @@ from app.ai.prompts import load as load_prompt
 from app.config import get_settings
 from app.db import models as m
 from app.guardrails import budget
-from app.guardrails.input import check_free_text
+from app.guardrails.input import check_document_text, check_free_text
 from app.observability import writer
 from app.observability.logging import get_logger
 from app.observability.tracing import ensure_trace_id, export_span
@@ -133,6 +135,30 @@ def _log_call(
     export_span(f"llm.{feature}", {"trace_id": trace_id, "model": model, "latency_ms": latency_ms})
 
 
+def _guard_documents(safe: dict[str, Any], document_keys: tuple[str, ...], flags: list[str]) -> None:
+    limit = get_settings().studio_chunk_chars + 2000
+    for k in document_keys:
+        v = safe.get(k)
+        if isinstance(v, str):
+            g = check_document_text(v, limit)
+            flags.extend(g.flags)
+            safe[k] = g.text
+        elif isinstance(v, list):
+            out = []
+            for item in v:
+                if isinstance(item, str):
+                    g = check_document_text(item, limit)
+                    flags.extend(g.flags)
+                    out.append(g.text)
+                elif isinstance(item, dict) and isinstance(item.get("text"), str):
+                    g = check_document_text(item["text"], limit)
+                    flags.extend(g.flags)
+                    out.append({**item, "text": g.text})
+                else:
+                    out.append(item)
+            safe[k] = out
+
+
 def _guard_inputs(inputs: dict[str, Any], free_text_keys: tuple[str, ...]) -> tuple[dict[str, Any], list[str], bool]:
     flags: list[str] = []
     blocked = False
@@ -156,6 +182,11 @@ def _guard_inputs(inputs: dict[str, Any], free_text_keys: tuple[str, ...]) -> tu
                     out.append(turn)
             safe[k] = out
     return safe, flags, blocked
+
+
+def _data_url(img: bytes) -> str:
+    mime = "image/png" if img[:8] == b"\x89PNG\r\n\x1a\n" else "image/jpeg"
+    return f"data:{mime};base64,{base64.b64encode(img).decode()}"
 
 
 def _usage(resp: Any) -> tuple[int, int]:
@@ -186,13 +217,20 @@ def call(
     validator: Callable[[Any], list[str]] | None = None,
     use_cache: bool = True,
     max_tokens: int | None = None,
+    document_keys: tuple[str, ...] = (),
+    images: list[bytes] | None = None,
+    image_detail: str = "auto",
+    timeout_s: float | None = None,
 ) -> LLMResult:
+    """`document_keys`: uploaded material, wrapped as data (rule 6). `images`: PNG/JPEG bytes for vision."""
     s = get_settings()
     trace_id = trace_id or ensure_trace_id()
     prompt = load_prompt(prompt_name)
     tier = "smart" if model_tier == "smart" else "fast"
     model = s.model_for(tier) or "offline"
     max_tokens = max_tokens or prompt.max_tokens
+    timeout = timeout_s or s.llm_timeout_s
+    images = images or []
     t0 = time.perf_counter()
 
     def finish_fallback(flags: list[str], retries: int = 0, schema_ok: bool = True, error: str | None = None,
@@ -206,12 +244,14 @@ def call(
                          prompt_version=prompt.version, blocked=blocked)
 
     safe_inputs, flags, blocked = _guard_inputs(inputs, free_text_keys)
+    _guard_documents(safe_inputs, document_keys, flags)
     if blocked:
         return finish_fallback(flags, blocked=True)
     if budget.over_budget(student_id):
         return finish_fallback([*flags, "budget_exceeded"])
 
-    key = cache.cache_key(prompt_name, prompt.version, model, safe_inputs)
+    key_inputs = {**safe_inputs, "_images": [hashlib.sha256(b).hexdigest() for b in images]} if images else safe_inputs
+    key = cache.cache_key(prompt_name, prompt.version, model, key_inputs)
     if use_cache:
         hit = cache.get(key)
         if hit is not None:
@@ -231,7 +271,12 @@ def call(
         return finish_fallback([*flags, "offline"])
 
     system, user = prompt.render(safe_inputs)
-    messages = [{"role": "system", "content": system}, {"role": "user", "content": user}]
+    user_content: Any = user
+    if images:
+        user_content = [{"type": "text", "text": user}] + [
+            {"type": "image_url", "image_url": {"url": _data_url(b), "detail": image_detail}} for b in images
+        ]
+    messages = [{"role": "system", "content": system}, {"role": "user", "content": user_content}]
     tin_total = tout_total = 0
     last_error: str | None = None
     schema_ok = True
@@ -243,7 +288,7 @@ def call(
                 messages=messages,
                 response_format=output_schema,
                 max_completion_tokens=max_tokens,
-                timeout=s.llm_timeout_s,
+                timeout=timeout,
             )
             tin, tout = _usage(resp)
             tin_total += tin

@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
+from app.config import DEFAULT_SUBJECT_ID, get_settings
 from app.db import models as m
 from app.schemas.common import BLOOM_ORDER
 
@@ -82,6 +83,9 @@ class ContentGraph:
     topo_order: list[str]
     questions_by_concept: dict[str, list[str]]
     questions_by_misconception: dict[str, list[str]]
+    subject_id: str = DEFAULT_SUBJECT_ID
+    worlds: list[dict] = field(default_factory=list)
+    diagnostic_concepts: list[str] = field(default_factory=list)
 
     # ------------------------------------------------------------ walks
     def ancestors(self, concept_id: str) -> list[str]:
@@ -186,12 +190,17 @@ def topo_sort(prereqs: dict[str, list[str]]) -> list[str]:
     return order
 
 
-def build_graph(db: Session) -> ContentGraph:
-    concepts_rows = db.scalars(select(m.Concept)).all()
-    prereq_rows = db.scalars(select(m.Prerequisite)).all()
+def build_graph(db: Session, subject_id: str = DEFAULT_SUBJECT_ID) -> ContentGraph:
+    q = select(m.Concept).where(m.Concept.subject_id == subject_id)
+    if subject_id != DEFAULT_SUBJECT_ID:  # the seed keeps its file order
+        q = q.order_by(m.Concept.position, m.Concept.id)
+    concepts_rows = db.scalars(q).all()
+    ids = [c.id for c in concepts_rows]
+    prereq_rows = db.scalars(select(m.Prerequisite).where(m.Prerequisite.concept_id.in_(ids))).all()
     prereqs: dict[str, list[str]] = {c.id: [] for c in concepts_rows}
     for r in prereq_rows:
-        prereqs[r.concept_id].append(r.prerequisite_id)
+        if r.prerequisite_id in prereqs:
+            prereqs[r.concept_id].append(r.prerequisite_id)
 
     concepts = {
         c.id: ConceptInfo(
@@ -224,12 +233,14 @@ def build_graph(db: Session) -> ContentGraph:
             socratic=list(mc.socratic or []),
             replay_id=mc.replay_id,
         )
-        for mc in db.scalars(select(m.Misconception)).all()
+        for mc in db.scalars(select(m.Misconception).where(m.Misconception.concept_id.in_(ids))).all()
     }
 
     questions: dict[str, QuestionInfo] = {}
     q_rows = db.scalars(
-        select(m.Question).where(m.Question.status == "approved").options(selectinload(m.Question.options))
+        select(m.Question)
+        .where(m.Question.status == "approved", m.Question.concept_id.in_(ids))
+        .options(selectinload(m.Question.options))
     ).all()
     for q in q_rows:
         questions[q.id] = QuestionInfo(
@@ -251,6 +262,15 @@ def build_graph(db: Session) -> ContentGraph:
         for t in q.targets:
             by_mis.setdefault(t, []).append(qid)
 
+    subject = db.get(m.Subject, subject_id)
+    worlds = list(subject.worlds) if subject is not None and subject.worlds else []
+    diagnostic = list(subject.diagnostic_concepts) if subject is not None and subject.diagnostic_concepts else []
+    if subject_id == DEFAULT_SUBJECT_ID:
+        from app.core.levels import worlds as default_worlds
+
+        worlds = worlds or default_worlds()
+        diagnostic = diagnostic or get_settings().diagnostic_concept_ids
+
     return ContentGraph(
         concepts=concepts,
         misconceptions=misconceptions,
@@ -258,23 +278,34 @@ def build_graph(db: Session) -> ContentGraph:
         topo_order=order,
         questions_by_concept=by_concept,
         questions_by_misconception=by_mis,
+        subject_id=subject_id,
+        worlds=worlds,
+        diagnostic_concepts=[c for c in diagnostic if c in concepts],
     )
 
 
 _lock = threading.Lock()
-_graph: ContentGraph | None = None
+_graphs: dict[str, ContentGraph] = {}
 
 
-def get_graph(db: Session) -> ContentGraph:
-    global _graph
-    if _graph is None:
+def get_graph(db: Session, subject_id: str | None = None) -> ContentGraph:
+    sid = subject_id or DEFAULT_SUBJECT_ID
+    g = _graphs.get(sid)
+    if g is None:
         with _lock:
-            if _graph is None:
-                _graph = build_graph(db)
-    return _graph
+            g = _graphs.get(sid)
+            if g is None:
+                g = _graphs[sid] = build_graph(db, sid)
+    return g
 
 
-def invalidate() -> None:
-    global _graph
+def subject_of_concept(db: Session, concept_id: str) -> str:
+    return db.scalar(select(m.Concept.subject_id).where(m.Concept.id == concept_id)) or DEFAULT_SUBJECT_ID
+
+
+def invalidate(subject_id: str | None = None) -> None:
     with _lock:
-        _graph = None
+        if subject_id is None:
+            _graphs.clear()
+        else:
+            _graphs.pop(subject_id, None)

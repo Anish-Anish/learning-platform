@@ -51,3 +51,23 @@ export type ClassGame = S["ClassGameResponse"];
 export type GameRun = S["GameRunOut"];
 export type GameStudentStat = S["GameStudentStat"];
 export type GameLevelStat = S["GameLevelStat"];
+
+// ---- teacher studio (5A) + subjects
+export type SubjectSummary = S["SubjectSummary"];
+export type SubjectStatus = SubjectSummary["status"];
+export type SubjectList = S["SubjectList"];
+export type SubjectDetail = S["SubjectDetail"];
+export type StudioJob = S["StudioJobOut"];
+export type SourceDocument = S["SourceDocumentOut"];
+export type StudioWorld = S["StudioWorld"];
+export type StudioGraph = S["StudioGraph"];
+export type StudioConcept = S["StudioConcept"];
+export type StudioConceptContent = S["StudioConceptContent"];
+export type StudioQuestion = S["StudioQuestion"];
+export type StudioFlashcard = S["StudioFlashcard"];
+export type ConceptPatch = S["ConceptPatch"];
+export type QuestionPatch = S["QuestionPatch"];
+export type EnrollmentList = S["EnrollmentList"];
+export type StudentSubjects = S["StudentSubjects"];
+export type StudentSubject = S["StudentSubject"];
+export type OkResponse = S["OkResponse"];

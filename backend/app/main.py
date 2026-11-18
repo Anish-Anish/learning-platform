@@ -9,9 +9,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.ai.llm_client import llm_mode
-from app.api import admin, attempts, boss, klass, levels, session, sim, students, teach, tutor
+from app.api import admin, attempts, boss, klass, levels, session, sim, students, studio, teach, tutor
 from app.config import get_settings
 from app.core.graph import get_graph
+from app.core.studio import StudioError, recover_interrupted_jobs
 from app.db.seed import ensure_seeded
 from app.db.session import SessionLocal, create_all
 from app.observability.logging import configure_logging, get_logger
@@ -28,8 +29,10 @@ async def lifespan(_app: FastAPI):
     create_all()
     with SessionLocal() as db:
         seeded = ensure_seeded(db)
+        interrupted = recover_interrupted_jobs(db)
         g = get_graph(db)
-    log.info("startup", seeded=seeded, concepts=len(g.concepts), questions=len(g.questions), llm_mode=llm_mode())
+    log.info("startup", seeded=seeded, concepts=len(g.concepts), questions=len(g.questions), llm_mode=llm_mode(),
+             interrupted_studio_jobs=interrupted)
     yield
 
 
@@ -49,8 +52,13 @@ app.add_middleware(
     expose_headers=["x-trace-id"],
 )
 
-for r in (session, attempts, students, levels, tutor, boss, teach, klass, admin, sim):
+for r in (session, attempts, students, levels, tutor, boss, teach, klass, admin, sim, studio):
     app.include_router(r.router)
+
+
+@app.exception_handler(StudioError)
+async def studio_error(_request: Request, exc: StudioError) -> JSONResponse:
+    return JSONResponse(status_code=exc.status_code, content={"detail": str(exc), "trace_id": current_trace_id()})
 
 
 @app.get("/health", tags=["meta"])

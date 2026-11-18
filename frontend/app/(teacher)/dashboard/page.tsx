@@ -19,6 +19,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
 import { useReport } from "@/lib/queries/student";
+import { useActiveSubjectName } from "@/lib/queries/studio";
 import { useAlerts, useHeatmap } from "@/lib/queries/teacher";
 import { pct } from "@/lib/states";
 import { cn } from "@/lib/utils";
@@ -92,6 +93,7 @@ export default function DashboardPage() {
   const heatmap = useHeatmap();
   const alerts = useAlerts();
   const qc = useQueryClient();
+  const subjectName = useActiveSubjectName();
   const [student, setStudent] = useState<string | null>(null);
   const [focusConcept, setFocusConcept] = useState<string | null>(null);
   const [simming, setSimming] = useState(false);
@@ -122,7 +124,7 @@ export default function DashboardPage() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Class dashboard</h1>
-          <p className="text-sm text-muted-foreground">Data Structures · live (refreshes every 5s)</p>
+          <p className="text-sm text-muted-foreground">{subjectName} · live (refreshes every 5s)</p>
         </div>
         <Button variant="outline" onClick={runSim} disabled={simming}>
           <BotIcon /> {simming ? "Simulating…" : "Run class simulator"}

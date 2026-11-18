@@ -7,7 +7,7 @@ from collections import Counter, defaultdict
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.config import get_settings
+from app.config import DEFAULT_SUBJECT_ID, get_settings
 from app.core.graph import ContentGraph
 from app.core.learner_model import calibration, mastery
 from app.core.states import AttemptLite, StateThresholds, classify
@@ -191,9 +191,16 @@ def root_report(db: Session, student_id: str, graph: ContentGraph, trace_id: str
 def class_states(db: Session, graph: ContentGraph):
     """Bulk version of recompute for every student: returns (students, rows_by_student, results, attempts)."""
     t = StateThresholds.from_settings()
-    students = db.scalars(select(m.Student).order_by(m.Student.is_simulated, m.Student.id)).all()
-    rows_all = db.scalars(select(m.MasteryState)).all()
-    attempts_all = db.scalars(select(m.Attempt).order_by(m.Attempt.student_id, m.Attempt.seq)).all()
+    sq = select(m.Student).order_by(m.Student.is_simulated, m.Student.id)
+    if graph.subject_id != DEFAULT_SUBJECT_ID:
+        enrolled = select(m.Enrollment.student_id).where(m.Enrollment.subject_id == graph.subject_id)
+        sq = sq.where(m.Student.id.in_(enrolled))
+    students = db.scalars(sq).all()
+    cids = list(graph.concepts)
+    rows_all = db.scalars(select(m.MasteryState).where(m.MasteryState.concept_id.in_(cids))).all()
+    attempts_all = db.scalars(
+        select(m.Attempt).where(m.Attempt.concept_id.in_(cids)).order_by(m.Attempt.student_id, m.Attempt.seq)
+    ).all()
     rows_by: dict[str, dict[str, m.MasteryState]] = defaultdict(dict)
     for r in rows_all:
         rows_by[r.student_id][r.concept_id] = r

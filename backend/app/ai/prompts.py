@@ -82,7 +82,7 @@ def load(name: str) -> Prompt:
     path = PROMPTS_DIR / f"{name}.md"
     if not path.exists():
         raise PromptError(f"prompt file not found: {path}")
-    return parse_prompt(path.read_text(), name)
+    return parse_prompt(path.read_text(encoding="utf-8"), name)
 
 
 def all_prompts() -> list[Prompt]:

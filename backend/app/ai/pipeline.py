@@ -8,6 +8,7 @@ writes candidates to backend/seed/generated/<concept>.json for human review (nev
 from __future__ import annotations
 
 import argparse
+import itertools
 import json
 import re
 from typing import Any
@@ -47,6 +48,8 @@ def generate_questions(
     n: int,
     trace_id: str | None = None,
     id_prefix: str = "q_gen",
+    subject: str = "Data Structures",
+    timeout_s: float | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     """Generate n questions; verify; regenerate failures once; drop the rest.
 
@@ -55,6 +58,7 @@ def generate_questions(
     trace_id = trace_id or new_trace_id()
     known = {m.id for m in misconceptions}
     inputs = {
+        "subject": subject,
         "concept": {"id": concept.id, "name": concept.name, "key_points": concept.key_points},
         "notes": notes,
         "misconceptions": [{"id": m.id, "description": m.description} for m in misconceptions],
@@ -64,17 +68,19 @@ def generate_questions(
     }
     accepted: list[dict[str, Any]] = []
     stats = {"generated": 0, "passed": 0, "regenerated": 0, "dropped": 0}
+    seq = itertools.count(1)
 
     def gen(extra: dict[str, Any]) -> list[dict[str, Any]]:
         res = call(feature="question_gen", prompt_name="question_gen", inputs={**inputs, **extra},
                    output_schema=GeneratedQuestionSet, model_tier="smart", trace_id=trace_id,
-                   fallback=lambda: GeneratedQuestionSet(questions=[]), use_cache=False)
+                   fallback=lambda: GeneratedQuestionSet(questions=[]), use_cache=False,
+                   document_keys=("notes",), timeout_s=timeout_s)
         out = []
-        for i, q in enumerate(res.output.questions):
+        for q in res.output.questions:
             d = q.model_dump()
-            d["options"] = [{**o, "id": "abcde"[j]} for j, o in enumerate(d["options"])]
+            d["options"] = [{**o, "id": "abcde"[j]} for j, o in enumerate(d["options"][:5])]
             d.update(concept_id=concept.id, type="mcq", status="draft", source="generated")
-            d["id"] = f"{id_prefix}_{concept.id}_{len(accepted) + i + 1:02d}"
+            d["id"] = f"{id_prefix}_{concept.id}_{next(seq):02d}"
             out.append(d)
         return out
 
@@ -111,16 +117,22 @@ def main() -> None:
     from app.db.session import create_all
 
     create_all()
-    concepts = {c["id"]: SeedConcept.model_validate(c) for c in json.loads((SEED_DIR / "concepts.json").read_text())}
-    mis = [SeedMisconception.model_validate(m) for m in json.loads((SEED_DIR / "misconceptions.json").read_text())]
+    concepts = {
+        c["id"]: SeedConcept.model_validate(c)
+        for c in json.loads((SEED_DIR / "concepts.json").read_text(encoding="utf-8"))
+    }
+    mis = [
+        SeedMisconception.model_validate(m)
+        for m in json.loads((SEED_DIR / "misconceptions.json").read_text(encoding="utf-8"))
+    ]
     c = concepts[args.concept]
     related = [m for m in mis if m.concept_id == c.id or m.concept_id in c.prerequisites]
-    notes = (SEED_DIR / "notes" / f"{c.id}.md").read_text()
+    notes = (SEED_DIR / "notes" / f"{c.id}.md").read_text(encoding="utf-8")
     qs, stats = generate_questions(c, notes, related, args.bloom, args.difficulty, args.n)
     out_dir = SEED_DIR / "generated"
     out_dir.mkdir(exist_ok=True)
     path = out_dir / f"{c.id}.json"
-    path.write_text(json.dumps(qs, indent=2))
+    path.write_text(json.dumps(qs, indent=2), encoding="utf-8")
     print(json.dumps(stats))
     print(f"Wrote {len(qs)} candidates to {path} — review before merging into questions.json.")
 

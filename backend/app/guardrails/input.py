@@ -46,6 +46,25 @@ def detect_injection(text: str) -> bool:
     return bool(_INJECTION.search(text))
 
 
+DOC_OPEN, DOC_CLOSE = "<<<DOCUMENT_TEXT", "DOCUMENT_TEXT>>>"
+
+
+def check_document_text(text: str, max_chars: int) -> GuardResult:
+    """Uploaded teacher material: data, never instructions (rule 6). Truncate, scrub contact PII,
+    flag (not block) injection-looking passages, and wrap in document delimiters."""
+    flags: list[str] = []
+    t = (text or "").replace(DOC_OPEN, "").replace(DOC_CLOSE, "").replace(OPEN, "").replace(CLOSE, "")
+    if len(t) > max_chars:
+        t = t[:max_chars]
+        flags.append("document_truncated")
+    t, pii_flags = scrub(t)
+    flags.extend(f"document_{f}" for f in pii_flags)
+    injection = detect_injection(t)
+    if injection:
+        flags.append("document_injection_suspect")
+    return GuardResult(text=f"{DOC_OPEN}\n{t}\n{DOC_CLOSE}", flags=flags, injection=injection)
+
+
 def check_free_text(text: str, max_chars: int | None = None, extra_names: list[str] | None = None) -> GuardResult:
     s = get_settings()
     limit = max_chars or s.max_free_text_chars

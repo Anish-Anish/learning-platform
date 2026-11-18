@@ -4,8 +4,11 @@ import { useEffect, useState } from "react";
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 
+export const DEFAULT_SUBJECT_ID = "data_structures";
+
 type SessionState = {
   studentId: string;
+  subjectId: string;
   sessionId: string | null;
   xp: number;
   level: number;
@@ -14,6 +17,7 @@ type SessionState = {
   setAvatar: (a: string) => void;
   toggleMuted: () => void;
   setStudent: (id: string) => void;
+  setSubject: (id: string) => void;
   setSession: (id: string | null) => void;
   setXp: (xp: number, level?: number) => void;
   addXp: (amount: number) => void;
@@ -25,6 +29,7 @@ export const useSession = create<SessionState>()(
   persist(
     (set) => ({
       studentId: "demo_student",
+      subjectId: DEFAULT_SUBJECT_ID,
       sessionId: null,
       xp: 0,
       level: 1,
@@ -33,6 +38,7 @@ export const useSession = create<SessionState>()(
       setAvatar: (avatar) => set({ avatar }),
       toggleMuted: () => set((s) => ({ muted: !s.muted })),
       setStudent: (id) => set({ studentId: id, sessionId: null, xp: 0, level: 1 }),
+      setSubject: (id) => set({ subjectId: id, sessionId: null }),
       setSession: (id) => set({ sessionId: id }),
       setXp: (xp, level) => set({ xp, level: level ?? 1 + Math.floor(Math.max(0, xp) / XP_PER_LEVEL) }),
       addXp: (amount) =>

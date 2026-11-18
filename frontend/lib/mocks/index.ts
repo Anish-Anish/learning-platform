@@ -2,6 +2,7 @@
 // Small but behaviourally faithful: a 3-question flow with a misconception, a root diagnosis and a lesson.
 import type { SSEHandler } from "../sse";
 import { mockGame } from "./game";
+import { mockStudio } from "./studio";
 import type {
   AdminMetrics,
   Alerts,
@@ -121,6 +122,7 @@ const DIAG: Diagnosis = {
 
 export const mockApi = {
   ...mockGame,
+  ...mockStudio,
   async startSession(student_id: string) {
     step = 0;
     return { trace_id: tid(), session_id: "ses_mock", next: nextQ(),
