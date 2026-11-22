@@ -429,6 +429,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/logs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Admin Logs */
+        get: operations["admin_logs_admin_logs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/telemetry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Admin Telemetry */
+        get: operations["admin_telemetry_admin_telemetry_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/feedback": {
         parameters: {
             query?: never;
@@ -716,6 +750,18 @@ export interface components {
         AdminMetricsResponse: {
             /** Trace Id */
             trace_id: string;
+            /**
+             * Window
+             * @enum {string}
+             */
+            window: "1h" | "24h" | "7d" | "30d" | "all";
+            /** Window Start */
+            window_start: string | null;
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
             /** System */
             system: {
                 [key: string]: number | null;
@@ -740,6 +786,12 @@ export interface components {
             learning: {
                 [key: string]: number | null;
             };
+            /** Studio */
+            studio: {
+                [key: string]: number | null;
+            };
+            /** Timeseries */
+            timeseries: components["schemas"]["TimeBucket"][];
             /** Question Health */
             question_health: components["schemas"]["QuestionHealth"][];
             /** Llm Mode */
@@ -1168,6 +1220,17 @@ export interface components {
             /** Student Ids */
             student_ids: string[];
         };
+        /** ExportHealth */
+        ExportHealth: {
+            /** Exported */
+            exported: number;
+            /** Failed */
+            failed: number;
+            /** Last Success At */
+            last_success_at: string | null;
+            /** Last Error */
+            last_error: string | null;
+        };
         /** FeatureCost */
         FeatureCost: {
             /** Feature */
@@ -1419,6 +1482,12 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /** Scope */
+            scope: string;
+            /** Student Id */
+            student_id: string | null;
+            /** Error */
+            error: string | null;
         };
         /** LatencyStat */
         LatencyStat: {
@@ -1579,6 +1648,45 @@ export interface components {
             run: components["schemas"]["LevelRunOut"];
             /** Best Stars */
             best_stars: number;
+        };
+        /** LogEntryOut */
+        LogEntryOut: {
+            /** Id */
+            id: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Level */
+            level: string;
+            /** Event */
+            event: string;
+            /** Logger */
+            logger: string | null;
+            /** Trace Id */
+            trace_id: string | null;
+            /** Student Id */
+            student_id: string | null;
+            /** Data */
+            data: {
+                [key: string]: unknown;
+            };
+        };
+        /** LogsResponse */
+        LogsResponse: {
+            /** Trace Id */
+            trace_id: string;
+            /** Logs */
+            logs: components["schemas"]["LogEntryOut"][];
+            /** Total */
+            total: number;
+            /** Levels */
+            levels: {
+                [key: string]: number;
+            };
+            /** Next Before Id */
+            next_before_id: number | null;
         };
         /** MapEdge */
         MapEdge: {
@@ -2262,12 +2370,65 @@ export interface components {
             /** Source */
             source: string;
         };
+        /** TelemetryStatus */
+        TelemetryStatus: {
+            /** Trace Id */
+            trace_id: string;
+            /** Otel Enabled */
+            otel_enabled: boolean;
+            /** Service Name */
+            service_name: string;
+            /** Environment */
+            environment: string;
+            /** Endpoint */
+            endpoint: string | null;
+            /** Auth Configured */
+            auth_configured: boolean;
+            /** Sample Ratio */
+            sample_ratio: number;
+            /** Openobserve Ui Url */
+            openobserve_ui_url: string;
+            /** Openobserve Org */
+            openobserve_org: string;
+            /** Exports */
+            exports: {
+                [key: string]: components["schemas"]["ExportHealth"];
+            };
+            /** Stored */
+            stored: {
+                [key: string]: number;
+            };
+            /** Retention */
+            retention: {
+                [key: string]: number;
+            };
+        };
+        /** TimeBucket */
+        TimeBucket: {
+            /**
+             * Start
+             * Format: date-time
+             */
+            start: string;
+            /** Requests */
+            requests: number;
+            /** Errors */
+            errors: number;
+            /** P95 Ms */
+            p95_ms: number | null;
+            /** Llm Calls */
+            llm_calls: number;
+            /** Cost Usd */
+            cost_usd: number;
+        };
         /** TracesResponse */
         TracesResponse: {
             /** Trace Id */
             trace_id: string;
             /** Calls */
             calls: components["schemas"]["LLMCallOut"][];
+            /** Total */
+            total: number;
         };
         /** UnlockOut */
         UnlockOut: {
@@ -3142,7 +3303,9 @@ export interface operations {
     };
     admin_metrics_admin_metrics_get: {
         parameters: {
-            query?: never;
+            query?: {
+                window?: "1h" | "24h" | "7d" | "30d" | "all";
+            };
             header?: {
                 "X-Subject-Id"?: string | null;
             };
@@ -3176,6 +3339,10 @@ export interface operations {
             query?: {
                 limit?: number;
                 feature?: string | null;
+                scope?: string | null;
+                trace_id?: string | null;
+                flagged?: boolean;
+                window?: "1h" | "24h" | "7d" | "30d" | "all";
             };
             header?: never;
             path?: never;
@@ -3199,6 +3366,63 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_logs_admin_logs_get: {
+        parameters: {
+            query?: {
+                level?: string;
+                q?: string | null;
+                event?: string | null;
+                trace_id?: string | null;
+                window?: "1h" | "24h" | "7d" | "30d" | "all";
+                limit?: number;
+                before_id?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LogsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_telemetry_admin_telemetry_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TelemetryStatus"];
                 };
             };
         };

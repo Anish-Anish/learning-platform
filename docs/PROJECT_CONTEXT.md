@@ -1,13 +1,13 @@
 # Rootwise — End-to-end project context
 
-> Single source of truth for the team and for Claude Code. Covers every decision made so far.
+> Single source of truth for the team and its AI coding assistants. Covers every decision made so far.
 > Tagline: **"Don't just find the mistake. Fix the root."**
 
 ---
 
 ## 0. How to use this document
-- Claude Code: read this before any task. `CLAUDE.md` holds the hard rules; this file holds the full spec.
-- Section numbers are referenced from `CLAUDE.md` and from task prompts (e.g. "implement §9.2").
+- Coding assistants and contributors: read this before any task. `CONTRIBUTING.md` holds the hard rules; this file holds the full spec.
+- Section numbers are referenced from `CONTRIBUTING.md` and from task prompts (e.g. "implement §9.2").
 - Values marked *(tunable)* are sensible starting points, not fixed requirements.
 - Open decisions are listed in §21. Do not invent answers to them; ask the human.
 
@@ -157,7 +157,7 @@ Data / external     : Content store (graph + question bank) | Event log (attempt
 ## 6. Repository structure
 ```
 rootwise/
-  CLAUDE.md
+  CONTRIBUTING.md
   docs/PROJECT_CONTEXT.md
   backend/
     pyproject.toml
@@ -507,7 +507,16 @@ published, else 404. Class analytics only count students enrolled in that subjec
 ### 14.1 Tracing and logs
 - Middleware assigns `trace_id` per request; it flows through event → learner model → LLM calls → response.
 - structlog JSON logs include `trace_id`, `student_id` (pseudonymous), feature.
-- Every LLM call → `llm_calls` row (§7). Optional Langfuse/Phoenix export when `TRACING_EXPORT=langfuse|phoenix`.
+- Every LLM call → `llm_calls` row (§7), with `scope` (`learner` / `studio`) so student cost per session
+  excludes teacher content generation.
+- OpenTelemetry (`app/observability/otel.py`, off unless `OTEL_ENABLED=true`): server span per request,
+  back-dated `llm <feature>` span per LLM call/agent turn (GenAI semconv attrs, never prompt text),
+  `studio.job` / stage spans; metrics `rootwise.llm.*`, `rootwise.guardrail.flags`, `rootwise.studio.jobs`;
+  every structlog event bridged to OTel logs. Exported over OTLP/HTTP to OpenObserve
+  (`deploy/openobserve/docker-compose.yml`). With OTel on, `trace_id` = `tr_<otel trace id>`.
+- Structured logs (INFO+) persisted to `app_logs` (bounded by age/rows) for the admin Logs page.
+- Admin API: `GET /admin/metrics?window=1h|24h|7d|30d|all`, `GET /admin/traces` (filters: scope, trace_id,
+  flagged), `GET /admin/logs` (level, search, event, trace_id, paging), `GET /admin/telemetry` (export health).
 
 ### 14.2 `/admin` metrics
 | Category | Metrics |
@@ -545,7 +554,7 @@ Results saved to `backend/app/evals/results/<timestamp>.json`.
 
 ---
 
-## 16. Team split (3 people, each using Claude Code)
+## 16. Team split (3 people, each using an AI coding assistant)
 
 | Person | Role | Owns | Delivers |
 |---|---|---|---|
@@ -574,8 +583,8 @@ Results saved to `backend/app/evals/results/<timestamp>.json`.
 **Cut order if behind:** misconception replay → spot the mistake → decay → admin charts (keep numbers).
 **Never cut:** core loop, diagnosis, knowledge map, eval numbers.
 
-**Working with Claude Code:** each person runs their own session; start every task with
-"Read CLAUDE.md and docs/PROJECT_CONTEXT.md §X"; small commits; merge at each checkpoint;
+**Working with AI coding assistants:** each person runs their own session; start every task with
+"Read CONTRIBUTING.md and docs/PROJECT_CONTEXT.md §X"; small commits; merge at each checkpoint;
 regenerate frontend types after any API change.
 
 ---
@@ -628,28 +637,28 @@ regenerate frontend types after any API change.
 
 ---
 
-## 20. Claude Code kickoff prompts
+## 20. Kickoff prompts
 
 **All (Hour 0–1, one person drives, others review)**
-> Read CLAUDE.md and docs/PROJECT_CONTEXT.md. Create the monorepo skeleton from §6. Implement all Pydantic
+> Read CONTRIBUTING.md and docs/PROJECT_CONTEXT.md. Create the monorepo skeleton from §6. Implement all Pydantic
 > schemas in backend/app/schemas/ for §7 and the request/response shapes in §11, plus stub FastAPI routes that
 > return fixture data. Set up the Next.js app with Tailwind + shadcn and a `gen:types` script. Do not implement
 > business logic yet.
 
 **P1**
-> Read CLAUDE.md and PROJECT_CONTEXT §7, §9, §11, §15.1. Implement the SQLAlchemy models and seed loader, then
+> Read CONTRIBUTING.md and PROJECT_CONTEXT §7, §9, §11, §15.1. Implement the SQLAlchemy models and seed loader, then
 > learner_model.py (§9.1–9.3) with full pytest coverage, then adaptive.py (§9.4) returning reason strings, then
 > wire POST /attempts and GET /next-question through the event bus (§4.3). Stay inside api/, core/, db/, sim/.
 
 **P2**
-> Read CLAUDE.md and PROJECT_CONTEXT §8, §10, §13, §14. Implement llm_client.py with structured outputs,
+> Read CONTRIBUTING.md and PROJECT_CONTEXT §8, §10, §13, §14. Implement llm_client.py with structured outputs,
 > retry/fallback, caching, guardrails and llm_calls logging. Then the prompt registry, the question pipeline
 > and verifier (§10.2–10.3), and generate the seed question bank for the concepts in §8.1 into
 > backend/seed/ for human review. Then the diagnosis agent (§10.4). Stay inside ai/, guardrails/,
 > observability/, evals/, prompts/, seed/.
 
 **P3**
-> Read CLAUDE.md and PROJECT_CONTEXT §12. Using mocks in lib/mocks/ shaped exactly like §11, build /learn
+> Read CONTRIBUTING.md and PROJECT_CONTEXT §12. Using mocks in lib/mocks/ shaped exactly like §11, build /learn
 > (quiz with Sure/Guessing, why-this-question hover card, XP toasts) and /map (React Flow skill tree with
 > state-coloured custom nodes and unlock animation). Use shadcn components, violet accent, light/dark mode.
 > Stay inside frontend/.

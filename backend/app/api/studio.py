@@ -7,10 +7,10 @@ from __future__ import annotations
 
 import shutil
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_db, trace_id
+from app.api.deps import client_key, enforce_rate_limit, get_db, trace_id
 from app.config import UPLOADS_DIR, get_settings
 from app.core import studio
 from app.schemas.studio import (
@@ -27,6 +27,12 @@ from app.schemas.studio import (
     SubjectDetail,
     SubjectList,
 )
+
+
+def job_rate_limit(request: Request) -> None:
+    """Generation jobs are the most expensive calls in the app: cap them per client."""
+    enforce_rate_limit(f"studio_job:{client_key(request)}", get_settings().studio_jobs_per_minute,
+                       "Too many generation requests. Wait a minute and try again.")
 
 
 def studio_enabled() -> None:
@@ -50,7 +56,7 @@ def list_subjects(db: Session = Depends(get_db), tid: str = Depends(trace_id)) -
     return SubjectList(trace_id=tid, subjects=studio.list_subjects(db))
 
 
-@studio_router.post("/subjects", response_model=SubjectDetail, status_code=201)
+@studio_router.post("/subjects", response_model=SubjectDetail, status_code=201, dependencies=[Depends(job_rate_limit)])
 def create_subject(
     name: str = Form(..., min_length=1, max_length=120),
     description: str = Form(default="", max_length=1000),
@@ -80,7 +86,8 @@ def delete_subject(subject_id: str, db: Session = Depends(get_db), tid: str = De
     return OkResponse(trace_id=tid)
 
 
-@studio_router.post("/subjects/{subject_id}/documents", response_model=SubjectDetail)
+@studio_router.post("/subjects/{subject_id}/documents", response_model=SubjectDetail,
+                     dependencies=[Depends(job_rate_limit)])
 def add_documents(
     subject_id: str,
     files: list[UploadFile] = File(...),
@@ -96,7 +103,8 @@ def add_documents(
     return studio.subject_detail(db, subject_id, tid)
 
 
-@studio_router.post("/subjects/{subject_id}/regenerate", response_model=SubjectDetail)
+@studio_router.post("/subjects/{subject_id}/regenerate", response_model=SubjectDetail,
+                     dependencies=[Depends(job_rate_limit)])
 def regenerate(subject_id: str, db: Session = Depends(get_db), tid: str = Depends(trace_id)) -> SubjectDetail:
     studio.start_job(db, studio.get_subject(db, subject_id))
     return studio.subject_detail(db, subject_id, tid)

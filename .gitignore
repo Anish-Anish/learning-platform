@@ -2,8 +2,9 @@
 .DS_Store
 Thumbs.db
 
-# Claude / Editor local config
-.claude/
+# Editor local config
+.vscode/
+.idea/
 
 # Python
 __pycache__/
@@ -27,3 +28,8 @@ frontend/.pnpm-debug.log*
 .env.*
 !.env.example
 !.env.local.example
+# Runtime output of scripts/run.sh and scripts/setup.sh (root only: app/admin/logs is source code)
+/logs/
+/.run/
+/.setup-build.log
+frontend/.env.local

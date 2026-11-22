@@ -184,8 +184,12 @@ def execute(db: Session, dx: m.Diagnosis, trace_id: str) -> m.Diagnosis:
 
 def run_in_background(diagnosis_id: str, trace_id: str) -> None:
     from app.db.session import SessionLocal
+    from app.observability import otel
+    from app.observability.tracing import set_trace_id
 
-    with SessionLocal() as db:
+    set_trace_id(trace_id)
+    with otel.span("diagnosis.background", **{"rootwise.trace_id": trace_id, "rootwise.diagnosis_id": diagnosis_id}), \
+            SessionLocal() as db:
         dx = db.get(m.Diagnosis, diagnosis_id)
         if dx is None or dx.status != "pending":
             return

@@ -46,6 +46,23 @@ def graph_dep(db: Session = Depends(get_db), subject_id: str = Depends(subject_d
     return get_graph(db, subject_id)
 
 
+def enforce_rate_limit(key: str, per_minute: int, message: str = "Too many requests. Try again in a minute.") -> None:
+    """Sliding-window guard for LLM-backed endpoints (cost + abuse). 429 with Retry-After."""
+    from app.guardrails.budget import rate_limited
+    from app.observability import otel
+    from app.observability.logging import get_logger
+
+    if rate_limited(key, per_minute):
+        kind = key.split(":", 1)[0]
+        otel.HTTP_REJECTED.add(1, {"reason": "rate_limited", "endpoint": kind})
+        get_logger(__name__).warning("rate_limited", limiter=kind, per_minute=per_minute)
+        raise HTTPException(429, message, headers={"Retry-After": "60"})
+
+
+def client_key(request: Request) -> str:
+    return request.client.host if request.client else "unknown"
+
+
 def require_student(db: Session, student_id: str) -> m.Student:
     s = db.get(m.Student, student_id)
     if s is None:

@@ -7,6 +7,7 @@ and decides what students can see: nothing reaches a student until the teacher p
 
 from __future__ import annotations
 
+import contextvars
 import re
 import shutil
 import threading
@@ -17,6 +18,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import BinaryIO
 
+from opentelemetry.trace import Status, StatusCode
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session, selectinload
 
@@ -28,8 +30,9 @@ from app.core.student_state import get_or_create_student
 from app.core.studio_graph import pick_diagnostic, rewire_without, subject_id_for
 from app.db import models as m
 from app.db.session import SessionLocal
+from app.observability import otel
 from app.observability.logging import get_logger
-from app.observability.tracing import new_trace_id
+from app.observability.tracing import TokenBudget, new_trace_id, set_budget, set_llm_scope, set_trace_id
 from app.schemas.common import BLOOM_ORDER
 from app.schemas.studio import (
     ConceptPatch,
@@ -224,6 +227,29 @@ class _Progress:
 
 
 def run_job(job_id: str) -> None:
+    """Runs on a worker thread in a fresh context (nothing leaks between jobs sharing a pool thread)."""
+    contextvars.Context().run(_run_job_traced, job_id)
+
+
+def _run_job_traced(job_id: str) -> None:
+    """Own trace, LLM cost scope 'studio' and a hard token budget for the whole job."""
+    with SessionLocal() as db:
+        job = db.get(m.StudioJob, job_id)
+        if job is None:
+            return
+        trace_id, subject_id = job.trace_id, job.subject_id
+    set_trace_id(trace_id)
+    set_llm_scope("studio")
+    set_budget(TokenBudget(get_settings().studio_max_tokens_per_job))
+    with otel.span("studio.job", **{"rootwise.trace_id": trace_id, "rootwise.job_id": job_id,
+                                    "rootwise.subject_id": subject_id}) as sp:
+        ok = _run_job(job_id)
+        if not ok:
+            sp.set_status(Status(StatusCode.ERROR, "generation failed"))
+    otel.STUDIO_JOBS.add(1, {"outcome": "done" if ok else "failed"})
+
+
+def _run_job(job_id: str) -> bool:
     from app.ai.ingest.parse import ParseError, parse_file
     from app.ai.studio_pipeline import PipelineError, build_subject
 
@@ -231,7 +257,7 @@ def run_job(job_id: str) -> None:
     with SessionLocal() as db:
         job = db.get(m.StudioJob, job_id)
         if job is None:
-            return
+            return False
         subject = get_subject(db, job.subject_id)
         job.status, job.stage, job.message = "running", "parsing", "Reading your files"
         db.commit()
@@ -270,7 +296,10 @@ def run_job(job_id: str) -> None:
             job.finished_at = job.updated_at = m.utcnow()
             subject.status = "review"
             db.commit()
-        log.info("studio_job_done", job_id=job_id, subject_id=sid, trace_id=trace_id)
+        log.info("studio_job_done", job_id=job_id, subject_id=sid, trace_id=trace_id,
+                 concepts=draft.stats["concepts"], questions=draft.stats["questions"],
+                 tokens_used=draft.stats.get("tokens_used"))
+        return True
     except Exception as exc:
         log.warning("studio_job_failed", job_id=job_id, subject_id=sid, error=f"{type(exc).__name__}: {exc}")
         with SessionLocal() as db:
@@ -284,6 +313,7 @@ def run_job(job_id: str) -> None:
             if subject is not None:
                 subject.status = "failed"
             db.commit()
+        return False
 
 
 def _update_doc(doc_id: str, **fields) -> None:

@@ -1,5 +1,5 @@
 // Typed API client. Generated types come from FastAPI's OpenAPI (`pnpm gen:types`).
-// With NEXT_PUBLIC_USE_MOCKS=true every call is served from lib/mocks (mock-first, CLAUDE.md rule 8).
+// With NEXT_PUBLIC_USE_MOCKS=true every call is served from lib/mocks (mock-first, CONTRIBUTING.md rule 8).
 import createClient from "openapi-fetch";
 
 import type { paths } from "./api-types";
@@ -9,6 +9,9 @@ import { readSSE, type SSEHandler } from "./sse";
 import { useSession } from "./store";
 import type {
   AdminMetrics,
+  LogsResponse,
+  MetricsWindow,
+  TelemetryStatus,
   Alerts,
   ClassGame,
   ConceptDetail,
@@ -55,6 +58,24 @@ client.use({
     return request;
   },
 });
+
+export type TraceQuery = {
+  limit?: number;
+  feature?: string;
+  scope?: "learner" | "studio";
+  trace_id?: string;
+  flagged?: boolean;
+  window?: MetricsWindow;
+};
+export type LogQuery = {
+  level?: "debug" | "info" | "warning" | "error" | "critical";
+  q?: string;
+  event?: string;
+  trace_id?: string;
+  window?: MetricsWindow;
+  limit?: number;
+  before_id?: number;
+};
 
 export class ApiError extends Error {
   constructor(
@@ -136,8 +157,12 @@ const real = {
     unwrap<TeachScore>(client.POST("/teach/{session_id}/score", { params: { path: { session_id } } })),
   heatmap: () => unwrap<Heatmap>(client.GET("/class/heatmap")),
   alerts: () => unwrap<Alerts>(client.GET("/class/alerts")),
-  metrics: () => unwrap<AdminMetrics>(client.GET("/admin/metrics")),
-  traces: (limit = 40) => unwrap<Traces>(client.GET("/admin/traces", { params: { query: { limit } } })),
+  metrics: (window: MetricsWindow = "24h") =>
+    unwrap<AdminMetrics>(client.GET("/admin/metrics", { params: { query: { window } } })),
+  traces: (query: TraceQuery = {}) =>
+    unwrap<Traces>(client.GET("/admin/traces", { params: { query: { limit: 50, ...query } } })),
+  logs: (query: LogQuery = {}) => unwrap<LogsResponse>(client.GET("/admin/logs", { params: { query } })),
+  telemetry: () => unwrap<TelemetryStatus>(client.GET("/admin/telemetry")),
   feedback: (body: {
     student_id: string;
     target_kind: "lesson" | "question";

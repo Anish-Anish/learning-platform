@@ -70,7 +70,7 @@ function NewSubjectDialog() {
               create.mutate(undefined, {
                 onSuccess: (d) => {
                   setOpen(false);
-                  router.push(`/studio/${d.subject.id}`);
+                  router.push(`/teacher/studio/${d.subject.id}`);
                 },
               })
             }
@@ -85,7 +85,7 @@ function NewSubjectDialog() {
 
 function SubjectCard({ s }: { s: SubjectSummary }) {
   return (
-    <Link href={`/studio/${s.id}`} className="group">
+    <Link href={`/teacher/studio/${s.id}`} className="group">
       <Card className="h-full transition-colors group-hover:border-primary/50">
         <CardHeader>
           <div className="flex items-start justify-between gap-2">

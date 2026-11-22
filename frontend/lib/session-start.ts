@@ -4,16 +4,19 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 
 import { api } from "./api";
+import { useSession } from "./store";
 
-// One in-flight POST /session/start per learner (React StrictMode mounts effects twice in dev).
+// One in-flight POST /session/start per learner and subject (React StrictMode mounts effects twice in dev).
+// The subject is part of the key: the response carries that subject's first question.
 const startCache = new Map<string, ReturnType<typeof api.startSession>>();
 
 export function startSessionOnce(studentId: string) {
-  let p = startCache.get(studentId);
+  const key = `${studentId}:${useSession.getState().subjectId}`;
+  let p = startCache.get(key);
   if (!p) {
     p = api.startSession(studentId);
-    startCache.set(studentId, p);
-    setTimeout(() => startCache.delete(studentId), 3000);
+    startCache.set(key, p);
+    setTimeout(() => startCache.delete(key), 3000);
   }
   return p;
 }

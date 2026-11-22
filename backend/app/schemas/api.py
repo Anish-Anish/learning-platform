@@ -6,6 +6,7 @@ Every response model carries `trace_id`.
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -416,7 +417,22 @@ class QuestionHealth(BaseModel):
     reports: int
 
 
+MetricsWindow = Literal["1h", "24h", "7d", "30d", "all"]
+
+
+class TimeBucket(BaseModel):
+    start: datetime
+    requests: int
+    errors: int
+    p95_ms: float | None  # None = no requests in the bucket (a gap, not 0 ms)
+    llm_calls: int
+    cost_usd: float
+
+
 class AdminMetricsResponse(Traced):
+    window: MetricsWindow
+    window_start: datetime | None
+    generated_at: datetime
     system: dict[str, float | int | None]
     endpoints: list[LatencyStat]
     features: list[FeatureCost]
@@ -424,6 +440,8 @@ class AdminMetricsResponse(Traced):
     ai_quality: dict[str, float | int | str | None]
     safety: dict[str, int]
     learning: dict[str, float | int | None]
+    studio: dict[str, float | int | None]
+    timeseries: list[TimeBucket]
     question_health: list[QuestionHealth]
     llm_mode: str
 
@@ -445,10 +463,53 @@ class LLMCallOut(BaseModel):
     guardrail_flags: list[str]
     cache_hit: bool
     created_at: datetime
+    scope: str
+    student_id: str | None
+    error: str | None
 
 
 class TracesResponse(Traced):
     calls: list[LLMCallOut]
+    total: int
+
+
+class LogEntryOut(BaseModel):
+    id: int
+    created_at: datetime
+    level: str
+    event: str
+    logger: str | None
+    trace_id: str | None
+    student_id: str | None
+    data: dict
+
+
+class LogsResponse(Traced):
+    logs: list[LogEntryOut]
+    total: int
+    levels: dict[str, int]
+    next_before_id: int | None
+
+
+class ExportHealth(BaseModel):
+    exported: int
+    failed: int
+    last_success_at: datetime | None
+    last_error: str | None
+
+
+class TelemetryStatus(Traced):
+    otel_enabled: bool
+    service_name: str
+    environment: str
+    endpoint: str | None
+    auth_configured: bool
+    sample_ratio: float
+    openobserve_ui_url: str
+    openobserve_org: str
+    exports: dict[str, ExportHealth]
+    stored: dict[str, int]
+    retention: dict[str, int]
 
 
 class SimRunRequest(BaseModel):

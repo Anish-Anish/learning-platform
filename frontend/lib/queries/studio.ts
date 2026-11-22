@@ -1,6 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useCallback } from "react";
 import { toast } from "sonner";
 
 import { api } from "../api";
@@ -79,14 +80,18 @@ export function useStudioMutation<A, R>(fn: (args: A) => Promise<R>, success?: s
   });
 }
 
-/** Switch the active subject and drop cached learner/class data that belonged to the previous one. */
+/** Switch the active subject and refetch learner/class data for it.
+ * resetQueries (not removeQueries): mounted pages keep their observers, so they show a skeleton and then the new
+ * subject's data. Removing queries would orphan those observers and leave the old subject on screen. */
 export function useSwitchSubject() {
   const qc = useQueryClient();
   const setSubject = useSession((s) => s.setSubject);
-  return (id: string) => {
-    if (id === useSession.getState().subjectId) return;
-    setSubject(id);
-    qc.removeQueries({ predicate: (q) => q.queryKey[0] !== "studio" });
-    void qc.invalidateQueries();
-  };
+  return useCallback(
+    (id: string) => {
+      if (id === useSession.getState().subjectId) return;
+      setSubject(id); // the API client reads the new subject id on the very next request
+      void qc.resetQueries({ predicate: (q) => q.queryKey[0] !== "studio" });
+    },
+    [qc, setSubject],
+  );
 }

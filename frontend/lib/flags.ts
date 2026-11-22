@@ -1,4 +1,4 @@
-// Feature flags (CLAUDE.md rule 9). Backend flags live in backend/app/config.py.
+// Feature flags (CONTRIBUTING.md rule 9). Backend flags live in backend/app/config.py.
 const on = (v: string | undefined, dflt = true) => (v === undefined ? dflt : v === "true");
 
 export const flags = {

@@ -343,6 +343,8 @@ class LLMCall(Base):
     guardrail_flags: Mapped[list] = mapped_column(JSON, default=list)
     cache_hit: Mapped[bool] = mapped_column(Boolean, default=False)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # learner = student-facing (counts toward cost per session) / studio = teacher content generation
+    scope: Mapped[str] = mapped_column(String, default="learner", server_default="learner", index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
 
 
@@ -355,6 +357,20 @@ class RequestMetric(Base):
     status_code: Mapped[int] = mapped_column(Integer)
     latency_ms: Mapped[float] = mapped_column(Float)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class AppLog(Base):
+    """Structured application logs (INFO+), kept for the admin Logs page; pruned by age and row count."""
+
+    __tablename__ = "app_logs"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
+    level: Mapped[str] = mapped_column(String, index=True)
+    event: Mapped[str] = mapped_column(String, index=True)
+    logger: Mapped[str | None] = mapped_column(String, nullable=True)
+    trace_id: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+    student_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    data: Mapped[dict] = mapped_column(JSON, default=dict)
 
 
 class Feedback(Base):

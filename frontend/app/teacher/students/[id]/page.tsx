@@ -28,7 +28,7 @@ export default function TeacherStudentPage() {
     <div className="space-y-4">
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="icon" asChild>
-          <Link href="/dashboard" aria-label="Back to dashboard">
+          <Link href="/teacher" aria-label="Back to dashboard">
             <ArrowLeftIcon />
           </Link>
         </Button>

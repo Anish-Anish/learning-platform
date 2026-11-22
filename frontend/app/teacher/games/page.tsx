@@ -76,7 +76,7 @@ export default function ArenaPage() {
                   <TableRow key={s.student_id} className="cursor-pointer">
                     <TableCell className="font-bold">{MEDAL[i] ?? i + 1}</TableCell>
                     <TableCell>
-                      <Link href={`/students/${s.student_id}`} className="font-medium hover:underline">
+                      <Link href={`/teacher/students/${s.student_id}`} className="font-medium hover:underline">
                         {s.display_name}
                       </Link>
                       {!s.is_simulated && <Badge variant="outline" className="ml-1.5 text-[10px]">live</Badge>}

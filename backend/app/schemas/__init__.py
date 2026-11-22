@@ -1,4 +1,4 @@
-"""Shared contracts. Change only with team agreement (CLAUDE.md rule 2)."""
+"""Shared contracts. Change only with team agreement (CONTRIBUTING.md rule 2)."""
 
 from .ai import *  # noqa: F401,F403
 from .api import *  # noqa: F401,F403

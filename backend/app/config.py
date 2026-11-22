@@ -73,9 +73,23 @@ class Settings(BaseSettings):
     rate_limit_per_minute: int = 20
     student_daily_token_budget: int = 60_000
 
-    # --- observability (§14) ---
-    tracing_export: str = ""  # "", "langfuse", "phoenix"
+    # --- observability (§14): OpenTelemetry -> OTLP/HTTP (OpenObserve, or any OTLP backend) ---
     log_level: str = "INFO"
+    otel_enabled: bool = False
+    otel_service_name: str = "rootwise-backend"
+    otel_environment: str = "dev"
+    # OTLP/HTTP base; /v1/traces, /v1/logs, /v1/metrics are appended. OpenObserve: <url>/api/<org>
+    otel_exporter_endpoint: str = "http://localhost:5080/api/default"
+    otel_headers: str = ""  # extra "key=value,key2=value2" headers for the exporter
+    otel_sample_ratio: float = 1.0
+    otel_metric_interval_s: int = 15
+    openobserve_user: str = ""  # Basic auth for OpenObserve (root email)
+    openobserve_password: str = ""
+    openobserve_ui_url: str = "http://localhost:5080"
+    openobserve_org: str = "default"
+    log_retention_days: int = 7
+    log_max_rows: int = 50_000
+    request_metrics_retention_days: int = 30
 
     # --- teacher studio (5A): uploads -> subject graph, quizzes, flashcards ---
     studio_max_upload_mb: int = 200
@@ -91,6 +105,12 @@ class Settings(BaseSettings):
     studio_flashcards_per_concept: int = 6
     studio_workers: int = 6
     studio_llm_timeout_s: float = 90.0
+    studio_max_tokens_per_job: int = 2_500_000  # hard cost cap per generation job
+    studio_jobs_per_minute: int = 5
+
+    # --- rate limits on LLM-backed student endpoints (per student, per minute) ---
+    rate_limit_hint_per_minute: int = 20
+    rate_limit_lesson_per_minute: int = 10
 
     # --- flags (rule 9) ---
     flag_studio: bool = True

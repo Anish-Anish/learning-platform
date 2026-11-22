@@ -22,6 +22,19 @@ def _add_context(_logger, _method, event_dict):
     return event_dict
 
 
+def _sinks(_logger, _method, event_dict):
+    """Fan out to the admin log store and (when enabled) OpenTelemetry logs. Never raises."""
+    try:
+        from app.observability import logstore, otel
+
+        logstore.capture(event_dict)
+        otel.emit_log(str(event_dict.get("level", "info")), str(event_dict.get("event", "")),
+                      {k: v for k, v in event_dict.items() if k not in ("event", "level", "timestamp")})
+    except Exception:  # pragma: no cover - logging must never break the app
+        pass
+    return event_dict
+
+
 def configure_logging(level: str = "INFO") -> None:
     global _configured
     if _configured:
@@ -33,6 +46,7 @@ def configure_logging(level: str = "INFO") -> None:
             _add_context,
             structlog.processors.add_log_level,
             structlog.processors.TimeStamper(fmt="iso", utc=True),
+            _sinks,
             structlog.processors.JSONRenderer(),
         ],
         wrapper_class=structlog.make_filtering_bound_logger(getattr(logging, level.upper(), 20)),
@@ -45,4 +59,5 @@ def configure_logging(level: str = "INFO") -> None:
 def get_logger(name: str | None = None):
     if not _configured:
         configure_logging()
-    return structlog.get_logger(name)
+    # PrintLoggerFactory ignores positional names, so bind it explicitly for the Logs page.
+    return structlog.get_logger().bind(logger=name) if name else structlog.get_logger()

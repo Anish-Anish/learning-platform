@@ -1,16 +1,17 @@
-# Rootwise — Claude Code guide
+# Rootwise — engineering guide
 
 Rootwise is an adaptive AI tutor that diagnoses *why* a student got something wrong by tracing
 mistakes back to the root prerequisite gap, reteaches it, and gamifies mastery.
-Built for the TCS OpenAI Hackathon: problem statement **5B first**, **5A (teacher studio) later**.
+Built for the TCS OpenAI Hackathon: problem statement **5B** (adaptive tutor) and **5A** (teacher studio).
 
 **Before any task, read `docs/PROJECT_CONTEXT.md`.** It is the full spec: features, architecture,
 data model, API contract, algorithms, guardrails, observability, team split and build plan.
 
 ## Current scope
-- Build 5B (student tutor + teacher dashboard + simulator + evals).
-- Do NOT build 5A features yet, but keep the hooks listed in PROJECT_CONTEXT §19
-  (`content_version`, `status`, `source_documents`, pipeline as a pure function).
+- 5B: student tutor, teacher class overview, simulator and evals.
+- 5A: teacher studio (upload material -> concept graph, quizzes, flashcards -> review -> publish -> assign).
+  Generated content stays draft until a teacher publishes it (PROJECT_CONTEXT §19.3).
+- Observability: OpenTelemetry (traces, metrics, logs) exported to OpenObserve, plus the admin pages.
 
 ## Stack
 - Backend: Python 3.11+, FastAPI, Pydantic v2, SQLAlchemy + SQLite, pytest, OpenAI Python SDK (structured outputs).
@@ -26,12 +27,14 @@ backend/app/sim/        P1  synthetic students
 backend/app/db/         P1  models, seed loader
 backend/app/schemas/    ALL shared contracts (change only with team agreement)
 backend/app/ai/         P2  llm client, pipeline, verifier, diagnosis agent, generators, teach-bot
-backend/app/guardrails/ P2
-backend/app/observability/ P2
+backend/app/guardrails/ P2  input/output/content guardrails, budgets, rate limits
+backend/app/observability/ P2  tracing ids, OpenTelemetry, metrics middleware, log store
 backend/app/evals/      P2
 backend/prompts/        P2  versioned prompt files
 backend/seed/           P2  concept notes + generated question bank (JSON)
 frontend/               P3
+deploy/                 infra (OpenObserve compose)
+scripts/                setup.sh / run.sh for Linux
 ```
 
 ## Non-negotiable rules
@@ -51,8 +54,11 @@ frontend/               P3
 
 ## Commands (keep these working)
 ```
+# everything (Linux)
+bash scripts/setup.sh            # install toolchain + deps, create .env files, seed, test, build
+bash scripts/run.sh              # start backend + frontend (add --prod for production builds)
 # backend
-cd backend && uv sync            # or: pip install -r requirements.txt
+cd backend && uv sync
 uv run uvicorn app.main:app --reload --port 8000
 uv run pytest
 uv run python -m app.db.seed     # load seed content

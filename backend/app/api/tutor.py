@@ -10,7 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.ai import generators
-from app.api.deps import get_db, graph_dep, require_student, sse, trace_id
+from app.api.deps import enforce_rate_limit, get_db, graph_dep, require_student, sse, trace_id
 from app.config import get_settings
 from app.core.adaptive import bloom_target
 from app.core.graph import ContentGraph
@@ -88,6 +88,7 @@ def lesson(
     require_student(db, student_id)
     if concept_id not in graph.concepts:
         raise HTTPException(404, "unknown concept")
+    enforce_rate_limit(f"lesson:{student_id}", get_settings().rate_limit_lesson_per_minute)
     rows = load_rows(db, student_id, graph)
     if misconception_id not in graph.misconceptions:
         active = rows[concept_id].active_misconception_ids or []
@@ -142,5 +143,6 @@ def get_hint(
         raise HTTPException(404, "hints disabled")
     if question_id not in graph.questions:
         raise HTTPException(404, "unknown question")
+    enforce_rate_limit(f"hint:{student_id or 'anonymous'}", get_settings().rate_limit_hint_per_minute)
     text = generators.hint(graph, question_id, level, tid, student_id)
     return HintResponse(trace_id=tid, question_id=question_id, level=level, hint=text, xp_cost=get_settings().xp_hint_cost)

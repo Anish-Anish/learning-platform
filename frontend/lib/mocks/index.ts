@@ -234,19 +234,35 @@ export const mockApi = {
         misconception_id: "recursion_base.m1", message: "33% of class shares the misconception \"Recursion stops automatically\"; root is recursion base cases.",
         reason: "2 of 6 active students have it active." }] };
   },
-  async metrics(): Promise<AdminMetrics> {
-    return { trace_id: tid(), llm_mode: "offline",
-      system: { requests: 1200, p50_ms: 6, p95_ms: 18, error_rate: 0, llm_calls: 900, cache_hit_rate: 0.1, schema_failure_rate: 0, retry_rate: 0, fallback_rate: 1 },
+  async metrics(window: AdminMetrics["window"] = "24h"): Promise<AdminMetrics> {
+    const now = new Date().toISOString().slice(0, 19);
+    return { trace_id: tid(), llm_mode: "offline", window, window_start: null, generated_at: now,
+      system: { requests: 1200, requests_per_min: 4.2, p50_ms: 6, p95_ms: 18, p99_ms: 40, error_rate: 0, client_error_rate: 0.01,
+        llm_calls: 900, llm_calls_live: 0, cache_hit_rate: 0.1, schema_failure_rate: null, retry_rate: null, fallback_rate: 1,
+        live_fallback_rate: null, llm_p95_ms: 0 },
       endpoints: [{ name: "/attempts", count: 600, p50_ms: 9, p95_ms: 21, error_rate: 0 }],
       features: [{ feature: "diagnosis", calls: 300, input_tokens: 0, output_tokens: 0, cost_usd: 0, p50_ms: 1, p95_ms: 3, fallback_rate: 1, cache_hit_rate: 0 }],
-      cost: { total_usd: 0, total_tokens: 0, sessions: 31, students: 31, usd_per_session: 0, usd_per_student: 0, tokens_per_session: 0 },
-      ai_quality: { root_gap_detection: 0.77, root_gap_detection_exercised: 0.98, root_gap_detected: 43, root_gap_planted: 56, root_concept_accuracy: 0.88, verifier_pass_rate: 1, verifier_checked: 73, grounding_failures: 0, answer_leakage_blocked: 0, teach_score_agreement: 0.75, diagnoses_total: 427, diagnoses_rejected: 0, diagnoses_llm: 0, last_eval_at: null },
-      safety: { moderation_flags: 0, injection_attempts_blocked: 2, off_topic_redirects: 1, pii_scrubbed: 0, budget_exceeded: 0 },
-      learning: { attempts: 1437, mastery_gain_per_session: 0.9, misconceptions_cleared: 40, concepts_mastered: 60, avg_attempts_to_mastery: 4.2, calibration: 0.6, drop_off_rate: 0, eval_mastery_gain_vs_control: 0.33 },
-      question_health: [] };
+      cost: { total_usd: 0, learner_usd: 0, studio_usd: 0, total_tokens: 0, sessions: 31, active_students: 31, students_total: 31,
+        usd_per_session: 0, usd_per_active_student: 0, tokens_per_session: 0 },
+      ai_quality: { root_gap_detection: 0.77, root_gap_detection_exercised: 0.98, root_gap_detected: 43, root_gap_planted: 56, root_concept_accuracy: 0.88, verifier_pass_rate: 1, verifier_checked: 73, verifier_first_pass_rate: null, grounding_failures: 0, answer_leakage_blocked: 0, teach_score_agreement: 0.75, diagnoses_total: 427, diagnoses_rejected: 0, diagnoses_llm: 0, last_eval_at: null },
+      safety: { injection_attempts: 2, blocked_calls: 0, moderation_flags: 0, off_topic_redirects: 1, pii_scrubbed: 0, budget_exceeded: 0,
+        job_budget_exceeded: 0, rate_limited: 0, uploads_rejected: 0, document_injection_suspects: 0, output_guardrail_drops: 0, studio_moderation_flags: 0 },
+      learning: { attempts: 1437, active_students: 31, accuracy: 0.62, mastery_gain_per_session: 0.9, misconceptions_cleared: 40, concepts_mastered: 60, avg_attempts_to_mastery: 4.2, calibration: 0.6, drop_off_rate: 0, eval_mastery_gain_vs_control: 0.33 },
+      studio: { subjects_total: 1, subjects_published: 1, subjects_in_review: 0, jobs: 0, jobs_running: 0, jobs_failed: 0, job_success_rate: null,
+        avg_job_seconds: null, p95_job_seconds: null, documents: 0, documents_failed: 0, pages_parsed: 0, figures_described: 0, pages_ocr: 0,
+        concepts_generated: 0, questions_generated: 0, flashcards_generated: 0, studio_llm_calls: 0, studio_tokens: 0, studio_usd: 0 },
+      timeseries: [], question_health: [] };
   },
   async traces() {
-    return { trace_id: tid(), calls: [] };
+    return { trace_id: tid(), calls: [], total: 0 };
+  },
+  async logs() {
+    return { trace_id: tid(), logs: [], total: 0, levels: {}, next_before_id: null };
+  },
+  async telemetry() {
+    return { trace_id: tid(), otel_enabled: false, service_name: "rootwise-backend", environment: "mock", endpoint: null,
+      auth_configured: false, sample_ratio: 1, openobserve_ui_url: "http://localhost:5080", openobserve_org: "default",
+      exports: {}, stored: { app_logs: 0, request_metrics: 0, llm_calls: 0 }, retention: { log_days: 7, log_max_rows: 50000, request_metrics_days: 30 } };
   },
   async feedback() {
     return { trace_id: tid(), id: "fb_mock", queued_for_review: true };

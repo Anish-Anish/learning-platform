@@ -1,17 +1,22 @@
-"""trace_id propagation (§14.1) + optional export to Langfuse / Phoenix.
+"""trace_id propagation (§14.1), LLM cost scope and per-job token budgets.
 
-A middleware assigns a trace_id per request; it flows via contextvars into events, the learner model,
-LLM calls (llm_calls.trace_id) and the response body/header.
+A middleware assigns a trace_id per request (the OpenTelemetry trace id when OTel is on, so app traces,
+llm_calls rows, logs and OpenObserve all correlate); it flows via contextvars into events, the learner
+model, LLM calls (llm_calls.trace_id) and the response body/header.
 """
 
 from __future__ import annotations
 
+import re
+import threading
 import uuid
 from contextvars import ContextVar
-from typing import Any
 
+_SAFE_ID = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 _trace_id: ContextVar[str | None] = ContextVar("trace_id", default=None)
 _student_id: ContextVar[str | None] = ContextVar("student_id", default=None)
+_llm_scope: ContextVar[str] = ContextVar("llm_scope", default="learner")
+_budget: ContextVar[TokenBudget | None] = ContextVar("token_budget", default=None)
 
 
 def new_trace_id() -> str:
@@ -46,24 +51,40 @@ def set_student_id(sid: str | None) -> None:
     _student_id.set(sid)
 
 
-def export_span(kind: str, payload: dict[str, Any]) -> None:
-    """Best-effort export to an external tracer when TRACING_EXPORT is set. Never raises."""
-    from app.config import get_settings
+def valid_trace_id(value: str | None) -> str | None:
+    """Accept client-supplied trace ids only if they are short and safe (no log/header injection)."""
+    return value if value and _SAFE_ID.match(value) else None
 
-    target = get_settings().tracing_export.lower()
-    if not target:
-        return
-    try:
-        if target == "langfuse":
-            from langfuse import Langfuse  # type: ignore[import-not-found]
 
-            Langfuse().trace(name=kind, id=payload.get("trace_id"), metadata=payload)
-        elif target == "phoenix":
-            from opentelemetry import trace  # type: ignore[import-not-found]
+# ------------------------------------------------------------------ LLM cost attribution + budgets
+def current_llm_scope() -> str:
+    return _llm_scope.get()
 
-            with trace.get_tracer("rootwise").start_as_current_span(kind) as span:
-                for k, v in payload.items():
-                    if isinstance(v, (str, int, float, bool)):
-                        span.set_attribute(k, v)
-    except Exception:  # pragma: no cover - optional dependency
-        pass
+
+def set_llm_scope(scope: str):
+    return _llm_scope.set(scope)
+
+
+class TokenBudget:
+    """Shared across threads of one job (contextvars copy the reference, not the object)."""
+
+    def __init__(self, limit: int) -> None:
+        self.limit = limit
+        self.used = 0
+        self._lock = threading.Lock()
+
+    @property
+    def exhausted(self) -> bool:
+        return self.used >= self.limit
+
+    def consume(self, tokens: int) -> None:
+        with self._lock:
+            self.used += max(0, tokens)
+
+
+def current_budget() -> TokenBudget | None:
+    return _budget.get()
+
+
+def set_budget(budget: TokenBudget | None):
+    return _budget.set(budget)

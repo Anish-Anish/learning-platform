@@ -12,11 +12,3 @@ export function useHeatmap() {
 export function useAlerts() {
   return useQuery({ queryKey: ["alerts"], queryFn: () => api.alerts(), refetchInterval: 5000 });
 }
-
-export function useMetrics() {
-  return useQuery({ queryKey: ["metrics"], queryFn: () => api.metrics(), refetchInterval: 10_000 });
-}
-
-export function useTraces(limit = 40) {
-  return useQuery({ queryKey: ["traces", limit], queryFn: () => api.traces(limit), refetchInterval: 10_000 });
-}

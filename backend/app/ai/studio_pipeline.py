@@ -12,7 +12,9 @@ Every LLM step has a deterministic fallback, so offline mode still yields a revi
 
 from __future__ import annotations
 
+import contextvars
 import re
+from collections import Counter
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
@@ -24,7 +26,11 @@ from app.ai.llm_client import call
 from app.ai.pipeline import extract_concepts, generate_questions
 from app.config import get_settings
 from app.core.studio_graph import GraphConcept, assign_units, concept_id, normalize_graph, slugify
+from app.guardrails.content import card_ok, notes_validator, question_ok, screen_text
+from app.guardrails.moderation import moderate
+from app.observability import otel
 from app.observability.logging import get_logger
+from app.observability.tracing import current_budget
 from app.schemas.ai import (
     ChunkConcepts,
     ConceptNotesOut,
@@ -59,6 +65,8 @@ class DraftConcept:
     questions: list[dict[str, Any]] = field(default_factory=list)
     flashcards: list[dict[str, str]] = field(default_factory=list)
     sources: list[str] = field(default_factory=list)
+    guard: Counter = field(default_factory=Counter)
+    warnings: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -78,7 +86,8 @@ def _parallel(fn: Callable[[Any], Any], items: list[Any], workers: int, on_done:
     if not items:
         return out
     with ThreadPoolExecutor(max_workers=max(1, workers)) as ex:
-        futs = {ex.submit(fn, it): i for i, it in enumerate(items)}
+        # copy_context per task: trace span, trace_id, LLM scope and the job token budget follow the work.
+        futs = {ex.submit(contextvars.copy_context().run, fn, it): i for i, it in enumerate(items)}
         done = 0
         for f in as_completed(futs):
             out[futs[f]] = f.result()
@@ -258,12 +267,18 @@ def author_concept(gc: GraphConcept, subject_id: str, subject: str, chunks: list
         return ConceptNotesOut(notes_md=excerpts[:2500], key_points=candidate_points.get(gc.key, [])[:5]
                                or [gc.description or gc.name], misconceptions=[])
 
-    notes = call(feature="studio_notes", prompt_name="concept_notes",
-                 inputs={"subject": subject, "concept": {"name": gc.name, "description": gc.description},
-                         "excerpts": excerpts},
-                 document_keys=("excerpts",), output_schema=ConceptNotesOut, model_tier="smart",
-                 trace_id=trace_id, fallback=notes_fallback, timeout_s=s.studio_llm_timeout_s).output
-    dc.notes_md = notes.notes_md.strip() or excerpts[:2500]
+    notes_res = call(feature="studio_notes", prompt_name="concept_notes",
+                     inputs={"subject": subject, "concept": {"name": gc.name, "description": gc.description},
+                             "excerpts": excerpts},
+                     document_keys=("excerpts",), output_schema=ConceptNotesOut, model_tier="smart",
+                     trace_id=trace_id, fallback=notes_fallback, timeout_s=s.studio_llm_timeout_s,
+                     validator=notes_validator(excerpts))
+    notes = notes_res.output
+    if notes_res.fallback_used and "grounding_failure" in notes_res.flags:
+        dc.guard["notes_grounding_fallback"] += 1
+    text, flags, _drop = screen_text(notes.notes_md.strip())
+    dc.guard.update(flags)
+    dc.notes_md = text or excerpts[:2500]
     dc.key_points = [k.strip()[:300] for k in notes.key_points if k.strip()][:6] or [gc.description or gc.name]
     dc.misconceptions = [
         {"id": f"{cid}.m{i + 1}", "concept_id": cid, "description": m.description.strip()[:400],
@@ -282,10 +297,19 @@ def author_concept(gc: GraphConcept, subject_id: str, subject: str, chunks: list
         for bloom, diff, k in plan:
             if k <= 0:
                 continue
-            qs, _stats = generate_questions(concept, dc.notes_md, mis, bloom, diff, k, trace_id=trace_id,
-                                            id_prefix=f"q_{bloom[:3]}", subject=subject,
-                                            timeout_s=s.studio_llm_timeout_s)
-            dc.questions.extend(qs)
+            qs, q_stats = generate_questions(concept, dc.notes_md, mis, bloom, diff, k, trace_id=trace_id,
+                                             id_prefix=f"q_{bloom[:3]}", subject=subject,
+                                             timeout_s=s.studio_llm_timeout_s)
+            dc.guard["questions_verifier_dropped"] += q_stats.get("dropped", 0)
+            dc.guard["questions_drafted"] += q_stats.get("generated", 0)
+            dc.guard["questions_passed_first_try"] += q_stats.get("passed", 0)
+            for q in qs:
+                if not question_ok(q):
+                    dc.guard["output_injection"] += 1
+                    continue
+                q["explanation"], flags, _ = screen_text(q["explanation"])
+                dc.guard.update(flags)
+                dc.questions.append(q)
 
     def cards_fallback() -> FlashcardSet:
         cards = [{"front": f"{gc.name}: what is key idea #{i + 1}?", "back": kp} for i, kp in enumerate(dc.key_points)]
@@ -302,10 +326,24 @@ def author_concept(gc: GraphConcept, subject_id: str, subject: str, chunks: list
     seen: set[str] = set()
     for c in cards.cards:
         front, back = c.front.strip()[:300], c.back.strip()[:600]
-        if front and back and front.lower() not in seen:
-            seen.add(front.lower())
-            dc.flashcards.append({"front": front, "back": back})
+        if not front or not back or front.lower() in seen:
+            continue
+        ok, reason = card_ok(front, back, dc.notes_md)
+        if not ok:
+            dc.guard[f"card_dropped_{reason}"] += 1
+            continue
+        back, flags, _ = screen_text(back)
+        dc.guard.update(flags)
+        seen.add(front.lower())
+        dc.flashcards.append({"front": front, "back": back})
     dc.flashcards = dc.flashcards[: s.studio_flashcards_per_concept + 2]
+
+    # Moderation of student-facing text: flagged items are surfaced to the teacher, not silently dropped.
+    flagged, mod_flags = moderate("\n".join([dc.notes_md, *(f"{c['front']} {c['back']}" for c in dc.flashcards)])[:20_000])
+    if flagged:
+        dc.guard["moderation_flagged"] += 1
+        cats = ", ".join(f.removeprefix("mod_") for f in mod_flags if f.startswith("mod_")) or "content"
+        dc.warnings.append(f"'{gc.name}': generated text was flagged by moderation ({cats}); review it before publishing")
     return dc
 
 
@@ -313,16 +351,19 @@ def author_concept(gc: GraphConcept, subject_id: str, subject: str, chunks: list
 def build_subject(docs: list[ParsedDocument], subject_id: str, subject: str, trace_id: str,
                   progress: Progress = _noop) -> StudioDraft:
     s = get_settings()
-    fig_stats = describe_figures(docs, subject, trace_id, progress)
+    with otel.span("studio.figures", **{"rootwise.figures": sum(len(d.figures) for d in docs)}):
+        fig_stats = describe_figures(docs, subject, trace_id, progress)
 
     chunks = chunk_documents(docs, s.studio_chunk_chars, s.studio_max_chunks)
     if not chunks:
         raise PipelineError("no readable text was found in the uploaded material")
     progress("extracting", 0.25, f"Finding concepts in {len(chunks)} sections")
-    candidates = extract_candidates(chunks, subject, trace_id, progress)
+    with otel.span("studio.extract", **{"rootwise.chunks": len(chunks)}):
+        candidates = extract_candidates(chunks, subject, trace_id, progress)
 
     progress("graph", 0.5, "Building the concept graph")
-    graph, units, warnings = build_graph(candidates, len(chunks), subject, trace_id)
+    with otel.span("studio.graph"):
+        graph, units, warnings = build_graph(candidates, len(chunks), subject, trace_id)
     points: dict[str, list[str]] = {}
     for _, cs in candidates:
         for c in cs:
@@ -331,12 +372,26 @@ def build_subject(docs: list[ParsedDocument], subject_id: str, subject: str, tra
     def tick(n: int) -> None:
         progress("authoring", 0.55 + 0.4 * n / len(graph), f"Writing notes, quizzes and flashcards ({n}/{len(graph)})")
 
+    def author(gc: GraphConcept) -> DraftConcept:
+        with otel.span("studio.concept", **{"rootwise.concept": gc.name}):
+            return author_concept(gc, subject_id, subject, chunks, points, trace_id)
+
     progress("authoring", 0.55, f"Writing notes, quizzes and flashcards for {len(graph)} concepts")
-    drafts = _parallel(lambda gc: author_concept(gc, subject_id, subject, chunks, points, trace_id),
-                       graph, max(1, s.studio_workers // 2), tick)
+    with otel.span("studio.author", **{"rootwise.concepts": len(graph)}):
+        drafts = _parallel(author, graph, max(1, s.studio_workers // 2), tick)
+    guard: Counter = Counter()
+    for d in drafts:
+        guard.update(d.guard)
+        warnings.extend(d.warnings)
+    budget = current_budget()
+    if budget is not None and budget.exhausted:
+        warnings.append(f"token budget of {budget.limit:,} reached: some items used offline fallbacks; "
+                        "raise STUDIO_MAX_TOKENS_PER_JOB or upload less material")
     key_to_id = {d.key: d.id for d in drafts}
     worlds = [{**u, "concepts": [key_to_id[k] for k in u["concepts"] if k in key_to_id]} for u in units]
     stats = {
+        "guardrails": dict(guard),
+        "tokens_used": budget.used if budget is not None else None,
         **fig_stats,
         "documents": len(docs),
         "pages": sum(d.stats.get("pages", 0) for d in docs),

@@ -15,6 +15,7 @@ from app.core.graph import get_graph
 from app.core.studio import StudioError, recover_interrupted_jobs
 from app.db.seed import ensure_seeded
 from app.db.session import SessionLocal, create_all
+from app.observability import otel, writer
 from app.observability.logging import configure_logging, get_logger
 from app.observability.metrics import TraceAndMetricsMiddleware
 from app.observability.tracing import current_trace_id
@@ -32,8 +33,10 @@ async def lifespan(_app: FastAPI):
         interrupted = recover_interrupted_jobs(db)
         g = get_graph(db)
     log.info("startup", seeded=seeded, concepts=len(g.concepts), questions=len(g.questions), llm_mode=llm_mode(),
-             interrupted_studio_jobs=interrupted)
+             interrupted_studio_jobs=interrupted, otel=otel.enabled())
     yield
+    writer.flush()
+    otel.shutdown()
 
 
 app = FastAPI(
@@ -51,6 +54,8 @@ app.add_middleware(
     allow_headers=["*"],
     expose_headers=["x-trace-id"],
 )
+# OpenTelemetry wraps the whole middleware stack, so it must be installed before the first request.
+otel.setup(app)
 
 for r in (session, attempts, students, levels, tutor, boss, teach, klass, admin, sim, studio):
     app.include_router(r.router)

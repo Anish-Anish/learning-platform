@@ -1,7 +1,7 @@
 "use client";
 
 import { useQueryClient } from "@tanstack/react-query";
-import { AlertTriangleIcon, BotIcon, ExternalLinkIcon, InfoIcon, SproutIcon, UsersIcon } from "lucide-react";
+import { AlertTriangleIcon, BotIcon, ExternalLinkIcon, InfoIcon, LibraryIcon, SproutIcon, UsersIcon } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -22,6 +22,7 @@ import { useReport } from "@/lib/queries/student";
 import { useActiveSubjectName } from "@/lib/queries/studio";
 import { useAlerts, useHeatmap } from "@/lib/queries/teacher";
 import { pct } from "@/lib/states";
+import { DEFAULT_SUBJECT_ID, useSession } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
 function StudentSheet({ studentId, name, onClose }: { studentId: string | null; name?: string; onClose: () => void }) {
@@ -72,7 +73,7 @@ function StudentSheet({ studentId, name, onClose }: { studentId: string | null; 
               </div>
               <StateLegend counts={report.data.state_counts} />
               <Button asChild className="w-full">
-                <Link href={`/students/${studentId}`}>
+                <Link href={`/teacher/students/${studentId}`}>
                   Open full profile <ExternalLinkIcon />
                 </Link>
               </Button>
@@ -94,6 +95,7 @@ export default function DashboardPage() {
   const alerts = useAlerts();
   const qc = useQueryClient();
   const subjectName = useActiveSubjectName();
+  const subjectId = useSession((s) => s.subjectId);
   const [student, setStudent] = useState<string | null>(null);
   const [focusConcept, setFocusConcept] = useState<string | null>(null);
   const [simming, setSimming] = useState(false);
@@ -123,12 +125,19 @@ export default function DashboardPage() {
     <div className="space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Class dashboard</h1>
-          <p className="text-sm text-muted-foreground">{subjectName} · live (refreshes every 5s)</p>
+          <h1 className="text-2xl font-semibold tracking-tight">Class overview</h1>
+          <p className="text-sm text-muted-foreground">{subjectName} · live, refreshes every 5 seconds</p>
         </div>
-        <Button variant="outline" onClick={runSim} disabled={simming}>
-          <BotIcon /> {simming ? "Simulating…" : "Run class simulator"}
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          {subjectId === DEFAULT_SUBJECT_ID && (
+            <Button variant="ghost" onClick={runSim} disabled={simming} title="Fills the class with 30 simulated students (demo data)">
+              <BotIcon /> {simming ? "Simulating…" : "Demo: simulate a class"}
+            </Button>
+          )}
+          <Button variant="outline" asChild>
+            <Link href="/teacher/studio"><LibraryIcon /> Create a subject from your material</Link>
+          </Button>
+        </div>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-4">

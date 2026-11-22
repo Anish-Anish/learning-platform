@@ -91,7 +91,7 @@ export default function StudioSubjectPage() {
     return (
       <div className="space-y-3">
         <p className="text-sm text-destructive">{detail.error?.message ?? "Subject not found"}</p>
-        <Button variant="outline" asChild><Link href="/studio">Back to studio</Link></Button>
+        <Button variant="outline" asChild><Link href="/teacher/studio">Back to studio</Link></Button>
       </div>
     );
   }
@@ -105,7 +105,7 @@ export default function StudioSubjectPage() {
     <div className="space-y-5">
       <div className="flex flex-wrap items-start gap-3">
         <Button variant="ghost" size="icon" asChild aria-label="Back to studio">
-          <Link href="/studio"><ArrowLeftIcon /></Link>
+          <Link href="/teacher/studio"><ArrowLeftIcon /></Link>
         </Button>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
@@ -241,7 +241,7 @@ export default function StudioSubjectPage() {
           <DialogFooter>
             <Button variant="ghost" onClick={() => setConfirmDelete(false)}>Cancel</Button>
             <Button variant="destructive" disabled={remove.isPending}
-              onClick={() => remove.mutate(undefined, { onSuccess: () => router.push("/studio") })}>Delete</Button>
+              onClick={() => remove.mutate(undefined, { onSuccess: () => router.push("/teacher/studio") })}>Delete</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -1,4 +1,4 @@
-"""The ONLY way to call an LLM (CLAUDE.md rule 3, PROJECT_CONTEXT §10.1).
+"""The ONLY way to call an LLM (CONTRIBUTING.md rule 3, PROJECT_CONTEXT §10.1).
 
 call():  input guardrails -> budget -> cache -> OpenAI structured output (timeout, token cap)
          -> schema validation (+ optional output validator) -> one retry -> fallback
@@ -27,9 +27,9 @@ from app.config import get_settings
 from app.db import models as m
 from app.guardrails import budget
 from app.guardrails.input import check_document_text, check_free_text
-from app.observability import writer
+from app.observability import otel, writer
 from app.observability.logging import get_logger
-from app.observability.tracing import ensure_trace_id, export_span
+from app.observability.tracing import current_budget, current_llm_scope, ensure_trace_id
 
 flush_logs = writer.flush
 
@@ -101,6 +101,12 @@ def _log_call(
     cache_hit: bool,
     error: str | None = None,
 ) -> None:
+    cost = round(_cost(tier, tin, tout), 6)
+    scope = current_llm_scope()
+    uniq_flags = sorted(set(flags))
+    budget = current_budget()
+    if budget is not None:
+        budget.consume(tin + tout)
     row = m.LLMCall(
         trace_id=trace_id,
         student_id=student_id,
@@ -111,13 +117,14 @@ def _log_call(
         input_tokens=tin,
         output_tokens=tout,
         latency_ms=latency_ms,
-        cost_usd=round(_cost(tier, tin, tout), 6),
+        cost_usd=cost,
         schema_ok=schema_ok,
         retries=retries,
         fallback_used=fallback_used,
-        guardrail_flags=sorted(set(flags)),
+        guardrail_flags=uniq_flags,
         cache_hit=cache_hit,
         error=error,
+        scope=scope,
     )
     writer.submit(lambda db: db.add(row))  # async: the caller may hold the SQLite write lock
     log.info(
@@ -127,16 +134,26 @@ def _log_call(
         prompt=prompt_name,
         prompt_version=prompt_version,
         model=model,
+        scope=scope,
         latency_ms=latency_ms,
+        tokens=tin + tout,
+        cost_usd=cost,
         fallback=fallback_used,
         cache_hit=cache_hit,
-        flags=sorted(set(flags)),
+        flags=uniq_flags,
+        **({"error": error[:200]} if error else {}),
     )
-    export_span(f"llm.{feature}", {"trace_id": trace_id, "model": model, "latency_ms": latency_ms})
+    otel.llm_span(feature=feature, prompt_name=prompt_name, prompt_version=prompt_version, model=model, scope=scope,
+                  tin=tin, tout=tout, latency_ms=latency_ms, cost_usd=cost, schema_ok=schema_ok, retries=retries,
+                  fallback_used=fallback_used, cache_hit=cache_hit, flags=uniq_flags, trace_id=trace_id, error=error)
+
+
+# Chunks grow for very large uploads (ingest/chunk.py); this is only a safety cap per document field.
+MAX_DOCUMENT_CHARS = 200_000
 
 
 def _guard_documents(safe: dict[str, Any], document_keys: tuple[str, ...], flags: list[str]) -> None:
-    limit = get_settings().studio_chunk_chars + 2000
+    limit = MAX_DOCUMENT_CHARS
     for k in document_keys:
         v = safe.get(k)
         if isinstance(v, str):
@@ -249,6 +266,9 @@ def call(
         return finish_fallback(flags, blocked=True)
     if budget.over_budget(student_id):
         return finish_fallback([*flags, "budget_exceeded"])
+    job_budget = current_budget()
+    if job_budget is not None and job_budget.exhausted:
+        return finish_fallback([*flags, "job_budget_exceeded"])
 
     key_inputs = {**safe_inputs, "_images": [hashlib.sha256(b).hexdigest() for b in images]} if images else safe_inputs
     key = cache.cache_key(prompt_name, prompt.version, model, key_inputs)

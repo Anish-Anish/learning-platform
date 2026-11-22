@@ -1,6 +1,6 @@
 "use client";
 
-// Effects only on hero moments (CLAUDE.md UI rules): unlock, misconception cleared, boss defeated.
+// Effects only on hero moments (CONTRIBUTING.md UI rules): unlock, misconception cleared, boss defeated.
 export async function celebrate(kind: "unlock" | "cleared" | "boss" | "mastered" = "unlock") {
   if (typeof window === "undefined") return;
   if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;

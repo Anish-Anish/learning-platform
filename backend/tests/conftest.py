@@ -8,6 +8,7 @@ import pytest
 
 # Force offline mode + an isolated DB before any app import reads settings.
 os.environ["OPENAI_API_KEY"] = ""
+os.environ["OTEL_ENABLED"] = "false"  # never export test traffic to a developer's OpenObserve
 os.environ["LESSON_STREAM_DELAY_MS"] = "0"
 _TMP = Path(tempfile.mkdtemp(prefix="rootwise-test-"))
 os.environ["DATABASE_URL"] = f"sqlite:///{_TMP / 'test.db'}"
