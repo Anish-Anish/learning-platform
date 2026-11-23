@@ -287,19 +287,42 @@ def author_concept(gc: GraphConcept, subject_id: str, subject: str, chunks: list
         for i, m in enumerate(notes.misconceptions[:3]) if m.description.strip()
     ]
 
-    if dc.misconceptions:
-        concept = SeedConcept(id=cid, name=gc.name, description=gc.description or gc.name, key_points=dc.key_points)
-        mis = [SeedMisconception.model_validate(m) for m in dc.misconceptions]
-        n = s.studio_questions_per_concept
-        plan = [("understand", -0.3, (n + 1) // 2), ("apply", 0.3, n // 2)]
-        if n > 4:
-            plan.append(("analyze", 0.7, n - 4))
-        for bloom, diff, k in plan:
-            if k <= 0:
-                continue
-            qs, q_stats = generate_questions(concept, dc.notes_md, mis, bloom, diff, k, trace_id=trace_id,
-                                             id_prefix=f"q_{bloom[:3]}", subject=subject,
-                                             timeout_s=s.studio_llm_timeout_s)
+    def cards_fallback() -> FlashcardSet:
+        cards = [{"front": f"{gc.name}: what is key idea #{i + 1}?", "back": kp} for i, kp in enumerate(dc.key_points)]
+        cards += [{"front": f"True or false, and why: {m['description']}", "back": m["correct_belief"]}
+                  for m in dc.misconceptions]
+        return FlashcardSet.model_validate({"cards": cards})
+
+    # Notes are the only prerequisite. Once they are ready, question batches and flashcards
+    # are independent calls, so run them concurrently for each concept. The bounded worker
+    # count prevents the outer per-concept pool from opening an unbounded number of requests.
+    concept = SeedConcept(id=cid, name=gc.name, description=gc.description or gc.name, key_points=dc.key_points)
+    mis = [SeedMisconception.model_validate(m) for m in dc.misconceptions]
+    n = s.studio_questions_per_concept
+    plan = [("understand", -0.3, (n + 1) // 2), ("apply", 0.3, n // 2)]
+    if n > 4:
+        plan.append(("analyze", 0.7, n - 4))
+    jobs = [("questions", bloom, diff, k) for bloom, diff, k in plan if k > 0]
+    jobs.append(("flashcards", "", 0.0, 0))
+
+    def run_job(job: tuple[str, str, float, int]) -> tuple[str, Any]:
+        kind, bloom, diff, k = job
+        if kind == "questions":
+            return kind, generate_questions(concept, dc.notes_md, mis, bloom, diff, k, trace_id=trace_id,
+                                            id_prefix=f"q_{bloom[:3]}", subject=subject,
+                                            timeout_s=s.studio_llm_timeout_s)
+        return kind, call(feature="studio_flashcards", prompt_name="flashcards",
+                          inputs={"subject": subject, "concept": gc.name, "key_points": dc.key_points,
+                                  "misconceptions": [m["description"] for m in dc.misconceptions], "notes": dc.notes_md,
+                                  "n": s.studio_flashcards_per_concept},
+                          document_keys=("notes",), output_schema=FlashcardSet, model_tier="fast", trace_id=trace_id,
+                          fallback=cards_fallback, timeout_s=s.studio_llm_timeout_s).output
+
+    results = _parallel(run_job, jobs, min(3, max(1, s.studio_workers // 2)), lambda _n: None)
+    cards: FlashcardSet | None = None
+    for kind, result in results:
+        if kind == "questions":
+            qs, q_stats = result
             dc.guard["questions_verifier_dropped"] += q_stats.get("dropped", 0)
             dc.guard["questions_drafted"] += q_stats.get("generated", 0)
             dc.guard["questions_passed_first_try"] += q_stats.get("passed", 0)
@@ -310,19 +333,10 @@ def author_concept(gc: GraphConcept, subject_id: str, subject: str, chunks: list
                 q["explanation"], flags, _ = screen_text(q["explanation"])
                 dc.guard.update(flags)
                 dc.questions.append(q)
+        else:
+            cards = result
 
-    def cards_fallback() -> FlashcardSet:
-        cards = [{"front": f"{gc.name}: what is key idea #{i + 1}?", "back": kp} for i, kp in enumerate(dc.key_points)]
-        cards += [{"front": f"True or false, and why: {m['description']}", "back": m["correct_belief"]}
-                  for m in dc.misconceptions]
-        return FlashcardSet.model_validate({"cards": cards})
-
-    cards = call(feature="studio_flashcards", prompt_name="flashcards",
-                 inputs={"subject": subject, "concept": gc.name, "key_points": dc.key_points,
-                         "misconceptions": [m["description"] for m in dc.misconceptions], "notes": dc.notes_md,
-                         "n": s.studio_flashcards_per_concept},
-                 document_keys=("notes",), output_schema=FlashcardSet, model_tier="fast", trace_id=trace_id,
-                 fallback=cards_fallback, timeout_s=s.studio_llm_timeout_s).output
+    cards = cards or cards_fallback()
     seen: set[str] = set()
     for c in cards.cards:
         front, back = c.front.strip()[:300], c.back.strip()[:600]

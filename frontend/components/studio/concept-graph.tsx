@@ -76,11 +76,13 @@ export function StudioConceptGraph({
   worlds,
   selectedId,
   onSelect,
+  fullHeight = false,
 }: {
   concepts: StudioConcept[];
   worlds: StudioWorld[];
   selectedId: string | null;
   onSelect: (id: string) => void;
+  fullHeight?: boolean;
 }) {
   const { resolvedTheme } = useTheme();
   const colorOf = useMemo(
@@ -102,7 +104,7 @@ export function StudioConceptGraph({
     [concepts],
   );
   return (
-    <div className="h-[560px] w-full overflow-hidden rounded-xl border bg-card/40">
+    <div className={cn("w-full overflow-hidden rounded-xl border bg-card/40", fullHeight ? "h-full min-h-0" : "h-[560px]")}>
       <ReactFlow
         nodes={nodes}
         edges={edges}

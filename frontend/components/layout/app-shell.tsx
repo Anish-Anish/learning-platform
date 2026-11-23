@@ -22,17 +22,17 @@ type NavItem = { href: string; label: string; exact?: boolean; also?: string[] }
 
 const NAV: Record<Exclude<Variant, "admin">, NavItem[]> = {
   student: [
-    { href: "/play", label: "🗺️ Adventure" },
-    { href: "/learn", label: "⚡ Quick play" },
-    { href: "/map", label: "🌳 Skill tree" },
-    { href: "/teach", label: "🤖 Teach" },
-    { href: "/report", label: "📊 Report" },
-    { href: "/trophies", label: "🏆 Trophies" },
+    { href: "/play", label: "Adventure" },
+    { href: "/learn", label: "Quick play" },
+    { href: "/map", label: "Skill tree" },
+    { href: "/teach", label: "Teach" },
+    { href: "/report", label: "Progress" },
+    { href: "/trophies", label: "Trophies" },
   ],
   teacher: [
     { href: "/teacher", label: "Class overview", exact: true, also: ["/teacher/students"] },
     { href: "/teacher/studio", label: "Studio" },
-    { href: "/teacher/games", label: "Game results" },
+    { href: "/teacher/games", label: "Results" },
   ],
 };
 
@@ -53,20 +53,22 @@ export function AppShell({ variant, children, wide }: { variant: Variant; childr
   const nav = variant === "admin" ? [] : NAV[variant];
   return (
     <div data-accent={variant === "student" ? "violet" : "teal"} className="flex min-h-screen flex-col">
-      <header className="sticky top-0 z-40 border-b bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className={cn("mx-auto flex h-14 items-center gap-3 px-4", wide ? "max-w-[1600px]" : "max-w-7xl")}>
-          <Logo />
-          <RoleSwitcher current={variant} />
+      <header className="sticky top-0 z-40 border-b bg-background/90 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+        <div className={cn("mx-auto flex min-h-16 flex-wrap items-center gap-2 px-4 py-2.5 md:flex-nowrap md:gap-3 md:py-2", wide ? "max-w-[1600px]" : "max-w-7xl")}>
+          <div className="flex min-w-0 shrink-0 items-center gap-2">
+            <Logo />
+            <RoleSwitcher current={variant} />
+          </div>
           {nav.length > 0 && (
-            <nav aria-label={`${variant} navigation`} className="ml-1 flex min-w-0 items-center gap-0.5 overflow-x-auto">
+            <nav aria-label={`${variant} navigation`} className="order-3 flex basis-full items-center gap-1 overflow-x-auto rounded-lg border bg-muted/30 p-1.5 md:order-none md:ml-1 md:basis-auto md:border-0 md:bg-transparent md:p-0">
               {nav.map((n) => (
                 <Link
                   key={n.href}
                   href={n.href}
                   aria-current={isActive(path, n) ? "page" : undefined}
                   className={cn(
-                    "rounded-md px-2.5 py-1.5 text-sm whitespace-nowrap text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
-                    isActive(path, n) && "bg-muted font-medium text-foreground",
+                    "rounded-md px-2.5 py-2 text-xs font-medium whitespace-nowrap text-muted-foreground transition-colors hover:bg-background hover:text-foreground sm:text-sm",
+                    isActive(path, n) && "bg-background text-foreground shadow-sm",
                   )}
                 >
                   {n.label}
@@ -74,7 +76,7 @@ export function AppShell({ variant, children, wide }: { variant: Variant; childr
               ))}
             </nav>
           )}
-          <div className="ml-auto flex shrink-0 items-center gap-1.5">
+          <div className="ml-auto flex min-w-0 shrink-0 items-center gap-1">
             {showSubjects && <SubjectSwitcher variant={variant === "student" ? "student" : "teacher"} />}
             {variant === "student" && hydrated && (
               <>

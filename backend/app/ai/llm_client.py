@@ -48,9 +48,16 @@ def get_client() -> Any:
     if not s.llm_enabled:
         return None
     if _client is None:
+        import httpx
         from openai import OpenAI
 
-        _client = OpenAI(api_key=s.openai_api_key, timeout=s.llm_timeout_s, max_retries=0)
+        _client = OpenAI(
+            api_key=s.openai_api_key,
+            base_url=s.openai_base_url,
+            http_client=httpx.Client(verify=s.openai_verify_ssl),
+            timeout=s.llm_timeout_s,
+            max_retries=0,
+        )
     return _client
 
 

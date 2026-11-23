@@ -166,7 +166,9 @@ Every page has a shared time window (last hour, 24 hours, 7 days, 30 days, all t
 | Variable | Default | Purpose |
 |---|---|---|
 | `OPENAI_API_KEY` | *(empty)* | Empty = offline mode |
-| `OPENAI_MODEL_FAST`, `OPENAI_MODEL_SMART` | `gpt-4.1-mini`, `gpt-4.1` | Models (never hard-coded) |
+| `OPENAI_BASE_URL` | `https://genailab.tcs.in/` | OpenAI-compatible TCS GenAI Lab gateway |
+| `OPENAI_VERIFY_SSL` | `false` | Required by the hackathon gateway example |
+| `OPENAI_MODEL_FAST`, `OPENAI_MODEL_SMART` | `genailab-openai-gpt-5.6-luna` | Models from the gateway's `/v1/models` list (never hard-coded) |
 | `PRICE_*` | per 1M tokens | Cost accounting on the admin pages |
 | `DATABASE_URL` | `sqlite:///./rootwise.db` | Database |
 | `CORS_ORIGINS` | localhost:3000 | Allowed frontend origins |

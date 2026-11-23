@@ -32,6 +32,14 @@ const ROLES = [
     cta: "Open my classroom",
     points: ["Turn your PDFs and notes into a course", "See every student's root gaps live", "Get alerts with the reason behind them"],
   },
+  {
+    href: "/admin",
+    accent: "amber",
+    icon: ActivityIcon,
+    who: "I'm an admin",
+    cta: "Open observability",
+    points: ["Monitor requests, traces and model calls", "Review AI quality and guardrails", "Understand system health and costs"],
+  },
 ];
 
 const STEPS = [
@@ -80,7 +88,7 @@ export default function Home() {
             proves it&apos;s fixed.
           </p>
 
-          <div className="mx-auto mt-10 grid max-w-3xl gap-4 text-left sm:grid-cols-2">
+          <div className="mx-auto mt-10 grid max-w-6xl gap-4 text-left sm:grid-cols-2 lg:grid-cols-3">
             {ROLES.map((r) => (
               <Link key={r.href} href={r.href} data-accent={r.accent}
                 className="group flex flex-col rounded-2xl border bg-card p-6 shadow-sm transition-all hover:-translate-y-0.5 hover:border-primary/60 hover:shadow-md">

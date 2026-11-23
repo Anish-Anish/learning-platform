@@ -21,8 +21,10 @@ class Settings(BaseSettings):
     database_url: str = f"sqlite:///{BACKEND_DIR / 'rootwise.db'}"
     cors_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
 
-    # --- OpenAI (rule 10: model names only from env; empty => offline/fallback mode) ---
+    # --- OpenAI-compatible LLM gateway (model names only from env; empty => offline/fallback mode) ---
     openai_api_key: str = ""
+    openai_base_url: str = "https://genailab.tcs.in/"
+    openai_verify_ssl: bool = False
     openai_model_fast: str = ""
     openai_model_smart: str = ""
     openai_moderation_model: str = "omni-moderation-latest"

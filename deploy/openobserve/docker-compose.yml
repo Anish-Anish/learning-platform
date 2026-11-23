@@ -13,7 +13,7 @@ services:
       - "5080:5080"   # UI + HTTP API + OTLP/HTTP (/api/<org>/v1/{traces,logs,metrics})
     environment:
       ZO_ROOT_USER_EMAIL: ${OPENOBSERVE_USER:-root@rootwise.local}
-      ZO_ROOT_USER_PASSWORD: ${OPENOBSERVE_PASSWORD:-Change-Me-Rootwise-1!}
+      ZO_ROOT_USER_PASSWORD: ${OPENOBSERVE_PASSWORD:-replace-me-in-local-env}
       ZO_DATA_DIR: /data
     volumes:
       - openobserve-data:/data

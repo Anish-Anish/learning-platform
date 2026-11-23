@@ -14,7 +14,7 @@ docker compose -f deploy/openobserve/docker-compose.yml up -d
 OTEL_ENABLED=true
 OTEL_EXPORTER_ENDPOINT=http://localhost:5080/api/default
 OPENOBSERVE_USER=root@rootwise.local
-OPENOBSERVE_PASSWORD=Change-Me-Rootwise-1!
+OPENOBSERVE_PASSWORD=replace-me-in-local-env
 
 # 3. Restart the backend, then open http://localhost:5080`;
 

@@ -4,11 +4,13 @@ import {
   ArrowLeftIcon,
   CircleAlertIcon,
   EyeOffIcon,
+  Maximize2Icon,
   FilePlus2Icon,
   RefreshCwIcon,
   RocketIcon,
   Trash2Icon,
   TriangleAlertIcon,
+  XIcon,
 } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
@@ -72,6 +74,7 @@ export default function StudioSubjectPage() {
   const [tab, setTab] = useState("graph");
   const [adding, setAdding] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [graphFullscreen, setGraphFullscreen] = useState(false);
 
   const publish = useStudioMutation(() => api.publish(id), "Published! Now assign it to students.");
   const unpublish = useStudioMutation(() => api.unpublish(id), "Unpublished. Students no longer see this subject.");
@@ -209,9 +212,15 @@ export default function StudioSubjectPage() {
               <>
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <WorldLegend worlds={d.worlds} names={names} />
-                  <p className="text-xs text-muted-foreground">
-                    Click a concept to {d.editable ? "edit its name, prerequisites and notes" : "view it"}. Arrows point from prerequisite to concept.
-                  </p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-xs text-muted-foreground">
+                      Click a concept to {d.editable ? "edit its name, prerequisites and notes" : "view it"}. Arrows point from prerequisite to concept.
+                    </p>
+                    <Button variant="outline" size="sm" onClick={() => setGraphFullscreen(true)}>
+                      <Maximize2Icon />
+                      <span className="hidden sm:inline">Full screen</span>
+                    </Button>
+                  </div>
                 </div>
                 <StudioConceptGraph concepts={concepts} worlds={d.worlds} selectedId={sheetId}
                   onSelect={(cid) => { setSheetId(cid); setSelected(cid); }} />
@@ -228,6 +237,25 @@ export default function StudioSubjectPage() {
             <SourcesTable documents={d.documents} stats={stats} />
           </TabsContent>
         </Tabs>
+      )}
+
+      {graphFullscreen && concepts.length > 0 && (
+        <div className="fixed inset-0 z-50 flex min-h-0 flex-col bg-background">
+          <div className="flex shrink-0 items-center justify-between gap-4 border-b px-4 py-3 sm:px-6">
+            <div className="min-w-0">
+              <h2 className="truncate text-base font-semibold">{s.name} · Concept graph</h2>
+              <p className="text-xs text-muted-foreground">Explore prerequisites and concept depth.</p>
+            </div>
+            <Button variant="outline" size="sm" onClick={() => setGraphFullscreen(false)}>
+              <XIcon />
+              <span className="hidden sm:inline">Exit full screen</span>
+            </Button>
+          </div>
+          <div className="min-h-0 flex-1 p-3 sm:p-5">
+            <StudioConceptGraph concepts={concepts} worlds={d.worlds} selectedId={sheetId} fullHeight
+              onSelect={(cid) => { setSheetId(cid); setSelected(cid); }} />
+          </div>
+        </div>
       )}
 
       <ConceptSheet concept={sheetConcept} concepts={concepts} editable={d.editable} onClose={() => setSheetId(null)} />
